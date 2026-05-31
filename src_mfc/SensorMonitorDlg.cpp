@@ -6,7 +6,8 @@
 #define new DEBUG_NEW
 #endif
 
-
+#define min_prime 1000000
+#define max_prime 1000000000
 
 
 #include <iostream>
@@ -84,55 +85,55 @@ int gen_prime_vuln(int low, int high) {
 }
 
 // Упрощённый хеш для демонстрации
-long long simple_hash(const std::string& str, long long mod) {
+long long simple_hash(const std::wstring& str, long long mod) {
     long long h = 0;
-    for (char c : str) {
-        h = (h * 31 + (unsigned char)c) % mod;
+    for (wchar_t c : str) {
+        h = (h * 31 + (wchar_t)c) % mod;
     }
     return h;
 }
 
 // Упрощённый «сертификат»: просто набор пар «ключ-значение» + подпись
 struct SimpleCert {
-    std::map<std::string, std::string> fields; // CN, O, validity, serial и т. д.
-    std::string signature; // Подпись УЦ в виде строки с числом
+    std::map<std::wstring, std::wstring> fields; // CN, O, validity, serial и т. д.
+    std::wstring signature; // Подпись УЦ в виде строки с числом
 };
 
 struct CSR {
-    std::map<std::string, std::string> subject; // Данные владельца: CN=example.com и т. п.
-    std::string pubkey_n; // Открытый модуль n клиента
-    std::string pubkey_e; // Открытый показатель e клиента
+    std::map<std::wstring, std::wstring> subject; // Данные владельца: CN=example.com и т. п.
+    std::wstring pubkey_n; // Открытый модуль n клиента
+    std::wstring pubkey_e; // Открытый показатель e клиента
 };
 
 // Создаём самоподписанный сертификат УЦ
 SimpleCert generate_root_ca(long long ca_n, long long ca_e, long long ca_d) {
     SimpleCert ca_cert;
-    ca_cert.fields["CN"] = "My Mini CA";
-    ca_cert.fields["validity_start"] = "2024-01-01";
-    ca_cert.fields["validity_end"] = "2034-01-01";
-    ca_cert.fields["serial"] = "1"; // Серийный номер
-    ca_cert.fields["pubkey_n"] = std::to_string(ca_n);
-    ca_cert.fields["pubkey_e"] = std::to_string(ca_e);
+    ca_cert.fields[_T("CN")] = _T("My Mini CA");
+    ca_cert.fields[_T("validity_start")] = _T("2024-01-01");
+    ca_cert.fields[_T("validity_end")] = _T("2034-01-01");
+    ca_cert.fields[_T("serial")] = _T("1"); // Серийный номер
+    ca_cert.fields[_T("pubkey_n")] = std::to_wstring(ca_n);
+    ca_cert.fields[_T("pubkey_e")] = std::to_wstring(ca_e);
 
     // «Подписываем» сертификат: хешируем поля и подписываем RSA
-    std::string data_to_sign;
+    std::wstring data_to_sign;
     for (const auto& field : ca_cert.fields) {
-        data_to_sign += field.first + ":" + field.second + "|";
+        data_to_sign += field.first + _T(":") + field.second + _T("|");
     }
     long long hash_val = simple_hash(data_to_sign, ca_n); // Ваш хеш-метод
     long long sig = mod_exp(hash_val, ca_d, ca_n); // Подпись: hash^d mod n
-    ca_cert.signature = std::to_string(sig);
+    ca_cert.signature = std::to_wstring(sig);
 
     return ca_cert;
 }
 
 // Формирование CSR клиентом
-CSR create_csr(const std::map<std::string, std::string>& subject,
+CSR create_csr(const std::map<std::wstring, std::wstring>& subject,
     long long client_n, long long client_e) {
     CSR csr;
     csr.subject = subject;
-    csr.pubkey_n = std::to_string(client_n);
-    csr.pubkey_e = std::to_string(client_e);
+    csr.pubkey_n = std::to_wstring(client_n);
+    csr.pubkey_e = std::to_wstring(client_e);
     return csr;
 }
 
@@ -147,21 +148,21 @@ SimpleCert sign_csr(const CSR& csr, const SimpleCert& ca_cert,
     }
 
     // Добавляем атрибуты от УЦ
-    client_cert.fields["issuer"] = ca_cert.fields.at("CN");
-    client_cert.fields["validity_start"] = "2024-01-01";
-    client_cert.fields["validity_end"] = "2025-01-01";
-    client_cert.fields["serial"] = std::to_string(rand() % 100000 + 1); // Случайный серийный номер
-    client_cert.fields["pubkey_n"] = csr.pubkey_n;
-    client_cert.fields["pubkey_e"] = csr.pubkey_e;
+    client_cert.fields[_T("issuer")] = ca_cert.fields.at(_T("CN"));
+    client_cert.fields[_T("validity_start")] = _T("2024-01-01");
+    client_cert.fields[_T("validity_end")] = _T("2025-01-01");
+    client_cert.fields[_T("serial")] = std::to_wstring(rand() % 100000 + 1); // Случайный серийный номер
+    client_cert.fields[_T("pubkey_n")] = csr.pubkey_n;
+    client_cert.fields[_T("pubkey_e")] = csr.pubkey_e;
 
     // Подписываем сертификат клиента закрытым ключом УЦ
-    std::string data_to_sign;
+    std::wstring data_to_sign;
     for (const auto& field : client_cert.fields) {
-        data_to_sign += field.first + ":" + field.second + "|";
+        data_to_sign += field.first + _T(":") + field.second + _T("|");
     }
     long long hash_val = simple_hash(data_to_sign, ca_n);
     long long sig = mod_exp(hash_val, ca_d, ca_n);
-    client_cert.signature = std::to_string(sig);
+    client_cert.signature = std::to_wstring(sig);
 
     return client_cert;
 }
@@ -169,17 +170,17 @@ SimpleCert sign_csr(const CSR& csr, const SimpleCert& ca_cert,
 // Проверка сертификата
 bool verify_cert(const SimpleCert& cert, const SimpleCert& ca_cert) {
     // Берём открытый ключ УЦ из его сертификата
-    long long ca_pub_n = std::stoll(ca_cert.fields.at("pubkey_n"));
-    long long ca_pub_e = std::stoll(ca_cert.fields.at("pubkey_e"));
+    long long ca_pub_n = std::stoll(ca_cert.fields.at(_T("pubkey_n")));
+    long long ca_pub_e = std::stoll(ca_cert.fields.at(_T("pubkey_e")));
 
     // Восстанавливаем хеш из подписи сертификата
     long long sig_val = std::stoll(cert.signature);
     long long recovered_hash = mod_exp(sig_val, ca_pub_e, ca_pub_n);
 
     // Считаем хеш от полей сертификата
-    std::string data_to_hash;
+    std::wstring data_to_hash;
     for (const auto& field : cert.fields) {
-        data_to_hash += field.first + ":" + field.second + "|";
+        data_to_hash += field.first + _T(":") + field.second + _T("|");
     }
     long long actual_hash = simple_hash(data_to_hash, ca_pub_n);
 
@@ -191,28 +192,23 @@ class Attacker {
 public:
     // Перебираем семена в предполагаемом временном окне (±30 сек от T)
     bool crack_rsa_key(long long n, long long e, time_t approx_time) {
-        std::cout << "Атака: перебор семян около времени " << approx_time << "\n";
         for (int offset = -30; offset <= 30; ++offset) {
             time_t candidate_seed = approx_time + offset;
             srand(static_cast<unsigned int>(candidate_seed));
 
             // Пытаемся сгенерировать p и q, которые дадут n
             for (int i = 0; i < 200; ++i) { // 200 попыток на семя
-                int p_candidate = gen_prime_trial(100, 200); // Диапазон как у УЦ
-                int q_candidate = gen_prime_trial(100, 200);
+                int p_candidate = gen_prime_trial(min_prime, max_prime); // Диапазон как у УЦ
+                int q_candidate = gen_prime_trial(min_prime, max_prime);
                 long long n_candidate = (long long)p_candidate * q_candidate;
 
                 if (n_candidate == n) {
-                    std::cout << "ВЗЛОМ УСПЕШЕН! Найдено p=" << p_candidate
-                        << ", q=" << q_candidate << "\n";
                     long long phi = (long long)(p_candidate - 1) * (q_candidate - 1);
                     long long d_cracked = mod_inv(e, phi);
-                    std::cout << "Восстановлен закрытый ключ d=" << d_cracked << "\n";
                     return true;
                 }
             }
         }
-        std::cout << "Атака не удалась — ключ не взломан.\n";
         return false;
     }
 
@@ -607,23 +603,32 @@ void CSensorMonitorDlg::UpdateMetrics()
 
 }
 
+#include <sstream>
+
+int ca_p = gen_prime_vuln(min_prime, max_prime);
+int ca_q = gen_prime_vuln(min_prime, max_prime);
+
+
+int client_p = gen_prime_vuln(min_prime, max_prime);
+int client_q = gen_prime_vuln(min_prime, max_prime);
+
 
 int is = 0;
 void check_func()
 {
-
+    std::wstringbuf log_buffer;
+    std::wostream log_stream(&log_buffer);
     time_t start_time = time(0);
-    std::cout << "=== СИМУЛЯЦИЯ АТАКИ НА СЛАБЫЙ ГПСЧ ===\n";
-    //  std::cout << "Запуск системы в момент " << start_time << " (это наша точка отсчёта)\n\n";
+    log_stream << _T("=== СИМУЛЯЦИЯ АТАКИ НА СЛАБЫЙ ГПСЧ ===\n");
+    log_stream << _T("Запуск системы в момент ") << start_time << _T(" (это наша точка отсчёта)\n\n");
 
       // Включаем уязвимое окно на 5 сек — именно в этот момент будут генерироваться ключи
     VulnerableRNG::is_weak_window = false;
     VulnerableRNG::seed();
 
-    //    std::cout << "--- ГЕНЕРАЦИЯ КЛЮЧЕЙ УЦ В УЯЗВИМЫЙ ПЕРИОД ---\n";
+    //    log_stream << "--- ГЕНЕРАЦИЯ КЛЮЧЕЙ УЦ В УЯЗВИМЫЙ ПЕРИОД ---\n";
         // Генерируем ключи УЦ в уязвимый период
-    int ca_p = gen_prime_vuln(100, 200);
-    int ca_q = gen_prime_vuln(100, 200);
+
     long long ca_n = (long long)ca_p * ca_q;
     long long ca_phi = (long long)(ca_p - 1) * (ca_q - 1);
     long long ca_e = 65537;
@@ -631,18 +636,13 @@ void check_func()
     long long ca_d = mod_inv(ca_e, ca_phi);
 
     SimpleCert ca_cert = generate_root_ca(ca_n, ca_e, ca_d);
-    //  std::cout << "УЦ создан в уязвимый период. n=" << ca_n
-    //      << ", p=" << ca_p << ", q=" << ca_q << "\n";
-
-      // Через 5 сек выключаем уязвимость — дальше система работает нормально
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-    VulnerableRNG::is_weak_window = false;
+    log_stream << _T("УЦ создан в уязвимый период. n=") << ca_n
+    << _T(", p=") << ca_p << _T(", q=") << ca_q << _T("\n");
 
     // Клиент генерирует ключи уже в «безопасном» режиме
- //   std::cout << "\n--- ГЕНЕРАЦИЯ КЛЮЧЕЙ КЛИЕНТА В НОРМАЛЬНОМ РЕЖИМЕ ---\n";
+    log_stream << _T("\n--- ГЕНЕРАЦИЯ КЛЮЧЕЙ КЛИЕНТА В НОРМАЛЬНОМ РЕЖИМЕ ---\n");
     VulnerableRNG::seed(); // «Нормальный» seed
-    int client_p = gen_prime_vuln(50, 150);
-    int client_q = gen_prime_vuln(50, 150);
+
     long long client_n = (long long)(client_p * client_q);
     long long client_phi = (long long)(client_p - 1) * (client_q - 1);
     long long client_e = 65537;
@@ -651,52 +651,53 @@ void check_func()
     long long client_d = mod_inv(client_e, client_phi);
 
     // Создаём CSR от клиента
-    std::map<std::string, std::string> subject;
-    subject["CN"] = "client.example.com";
-    subject["O"] = "Client Org";
+    std::map<std::wstring, std::wstring> subject;
+    subject[_T("CN")] = _T("client.example.com");
+    subject[_T("O")] = _T("Client Org");
 
     CSR client_csr = create_csr(subject, client_n, client_e);
-    //   std::cout << "CSR создан!\n";
+    //   log_stream << "CSR создан!\n";
 
        // УЦ подписывает CSR и выдаёт сертификат
     SimpleCert client_cert = sign_csr(client_csr, ca_cert, ca_d, ca_n);
-    //   std::cout << "Сертификат клиента выдан!\n";
+    log_stream << _T("Сертификат клиента выдан!\n");
 
        // Проверка сертификата клиента с помощью открытого ключа УЦ
-    if (verify_cert(client_cert, ca_cert)) {
-        //       std::cout << "Проверка сертификата: ПРОЙДЕНА! Сертификат доверен.\n";
+    if (verify_cert(client_cert, ca_cert)) 
+    {
+        log_stream << _T("Проверка сертификата: ПРОЙДЕНА! Сертификат доверен.\n");
     }
     else {
-        //   std::cout << "Проверка сертификата: НЕ ПРОЙДЕНА!\n";
+        log_stream << _T("Проверка сертификата: НЕ ПРОЙДЕНА!\n");
         return;
     }
 
     // === АТАКА НА КЛЮЧ УЦ ===
-    std::cout << "\n=== ЗАПУСК АТАКИ " << is++ << " НА КЛЮЧ УЦ ===\n";
+    log_stream << _T("\n=== ЗАПУСК АТАКИ ") << is++ << _T(" НА КЛЮЧ УЦ ===\n");
     Attacker attacker;
     bool attack_success = attacker.crack_rsa_key(ca_n, ca_e, start_time);
 
     if (attack_success) {
-        std::cout << "\n=== АТАКА УСПЕШНА: злоумышленник восстановил закрытый ключ УЦ! ===\n";
-        std::cout << "Теперь он может подписывать любые сертификаты от имени УЦ.\n";
+        log_stream << _T("\n=== АТАКА УСПЕШНА: злоумышленник восстановил закрытый ключ УЦ! ===\n");
+        log_stream << _T("Теперь он может подписывать любые сертификаты от имени УЦ.\n");
     }
     else {
-        //    std::cout << "\n=== АТАКА НЕ УДАЛАСЬ: ключ УЦ защищён. ===\n";
+        log_stream << _T("\n=== АТАКА НЕ УДАЛАСЬ: ключ УЦ защищён. ===\n");
         return;
     }
     long long evil_n = 0;
     long long evil_e = 0;
     // Демонстрация: что может сделать злоумышленник, если взломал ключ УЦ
     if (attack_success) {
-        std::cout << "\n--- ДЕМОНСТРАЦИЯ ЗЛОУМЫШЛЕННЫХ ДЕЙСТВИЙ ---\n";
+        log_stream << _T("\n--- ДЕМОНСТРАЦИЯ ЗЛОУМЫШЛЕННЫХ ДЕЙСТВИЙ ---\n");
         // Злоумышленник создаёт фальшивый CSR
-        std::map<std::string, std::string> evil_subject;
-        evil_subject["CN"] = "evil.com";
-        evil_subject["O"] = "Evil Corp";
+        std::map<std::wstring, std::wstring> evil_subject;
+        evil_subject[_T("CN")] = _T("evil.com");
+        evil_subject[_T("O")] = _T("Evil Corp");
 
         // Генерирует свои ключи (но это не обязательно — он может использовать любые)
-        int evil_p = gen_prime_vuln(30, 80);
-        int evil_q = gen_prime_vuln(30, 80);
+        int evil_p = gen_prime_vuln(min_prime, max_prime);
+        int evil_q = gen_prime_vuln(min_prime, max_prime);
         evil_n = (long long)(evil_p * evil_q);
         evil_e = 65537;
 
@@ -704,70 +705,70 @@ void check_func()
 
         // Подписывает фальшивый сертификат СВОИМ (восстановленным) ключом УЦ
         SimpleCert evil_cert = sign_csr(evil_csr, ca_cert, ca_d, ca_n);
-        std::cout << "Злоумышленник выпустил фальшивый сертификат для evil.com!\n";
+        log_stream << _T("Злоумышленник выпустил фальшивый сертификат для evil.com!\n");
 
         // Попытка проверки — в нашей системе она пройдёт, потому что подпись валидна!
         if (verify_cert(evil_cert, ca_cert)) {
-            std::cout << "Фальшивый сертификат прошёл проверку! Угроза реальна.\n";
+            log_stream << _T("Фальшивый сертификат прошёл проверку! Угроза реальна.\n");
         }
     }
     // Клиент подписывает сообщение своим закрытым ключом
-    std::string message = "Hello, CA! This is a secure message.";
+    std::wstring message = _T("Hello, CA! This is a secure message.");
     long long msg_hash = simple_hash(message, client_n);
     long long client_signature = mod_exp(msg_hash, client_d, client_n);
 
-    std::cout << "\n--- ПРОВЕРКА ПОДПИСИ СООБЩЕНИЯ КЛИЕНТА ---\n";
-    std::cout << "Сообщение: " << message << "\n";
-    std::cout << "Подпись клиента: " << client_signature << "\n";
+    log_stream << _T("\n--- ПРОВЕРКА ПОДПИСИ СООБЩЕНИЯ КЛИЕНТА ---\n");
+    log_stream << _T("Сообщение: ") << message << _T("\n");
+    log_stream << _T("Подпись клиента: ") << client_signature << _T("\n");
 
     // Берём открытый ключ клиента из его сертификата
-    long long cert_client_n = std::stoll(client_cert.fields.at("pubkey_n"));
-    long long cert_client_e = std::stoll(client_cert.fields.at("pubkey_e"));
+    long long cert_client_n = std::stoll(client_cert.fields.at(_T("pubkey_n")));
+    long long cert_client_e = std::stoll(client_cert.fields.at(_T("pubkey_e")));
 
     // Восстанавливаем хеш из подписи
     long long recovered_hash = mod_exp(client_signature, cert_client_e, cert_client_n);
     // Считаем хеш от оригинального сообщения
     long long actual_hash = simple_hash(message, cert_client_n);
 
-    std::cout << "Восстановленный хеш: " << recovered_hash << "\n";
-    std::cout << "Реальный хеш: " << actual_hash << "\n";
+    log_stream << _T("Восстановленный хеш: ") << recovered_hash << _T("\n");
+    log_stream << _T("Реальный хеш: ") << actual_hash << _T("\n");
 
     if (recovered_hash == actual_hash) {
-        std::cout << "Проверка подписи сообщения: ПРОЙДЕНА! Сообщение не изменено и от доверенного клиента.\n";
+        log_stream << _T("Проверка подписи сообщения: ПРОЙДЕНА! Сообщение не изменено и от доверенного клиента.\n");
     }
     else {
-        std::cout << "Проверка подписи сообщения: НЕ ПРОЙДЕНА!\n";
+        log_stream << _T("Проверка подписи сообщения: НЕ ПРОЙДЕНА!\n");
     }
 
     // Демонстрация атаки, если злоумышленник взломал ключ УЦ
     if (attack_success) {
-        std::cout << "\n--- АТАКА НА ПОДПИСЬ СООБЩЕНИЯ ---\n";
+        log_stream << _T("\n--- АТАКА НА ПОДПИСЬ СООБЩЕНИЯ ---\n");
         // Злоумышленник может подделать подпись от имени клиента
         // Он использует свой ключ (или взломанный ключ УЦ) для создания фальшивой подписи
 
-        std::string evil_message = "Transfer all funds to account 12345";
+        std::wstring evil_message = _T("Transfer all funds to account 12345");
         long long evil_hash = simple_hash(evil_message, evil_n);
         // Подписываем фальшивое сообщение, выдавая его за клиента
         long long evil_signature = mod_exp(evil_hash, evil_e, evil_n); // Здесь на самом деле нужно использовать d, но для демонстрации
 
-        std::cout << "Злоумышленник создал фальшивую подпись для сообщения: " << evil_message << "\n";
-        std::cout << "Фальшивая подпись: " << evil_signature << "\n";
+        log_stream << _T("Злоумышленник создал фальшивую подпись для сообщения: ") << evil_message << _T("\n");
+        log_stream << _T("Фальшивая подпись: ") << evil_signature << _T("\n");
 
         // Попытка проверки фальшивой подписи (она не пройдёт, потому что используется другой ключ)
         long long recovered_evil_hash = mod_exp(evil_signature, cert_client_e, cert_client_n);
         long long actual_evil_hash = simple_hash(evil_message, cert_client_n);
 
         if (recovered_evil_hash == actual_evil_hash) {
-            std::cout << "Фальшивая подпись прошла проверку! Угроза реализована.\n";
+            log_stream << _T("Фальшивая подпись прошла проверку! Угроза реализована.\n");
         }
         else {
-            std::cout << "Фальшивая подпись не прошла проверку. Нужна более тонкая атака.\n";
+            log_stream << _T("Фальшивая подпись не прошла проверку. Нужна более тонкая атака.\n");
 
             // Более изощрённая атака: злоумышленник создаёт сертификат с тем же n, но другим e
             // и использует его для подделки подписи
-            std::map<std::string, std::string> tricky_subject;
-            tricky_subject["CN"] = "trusted.com";
-            tricky_subject["O"] = "Trusted Org";
+            std::map<std::wstring, std::wstring> tricky_subject;
+            tricky_subject[_T("CN")] = _T("trusted.com");
+            tricky_subject[_T("O")] = _T("Trusted Org");
 
             CSR tricky_csr = create_csr(tricky_subject, cert_client_n, 3); // Используем тот же n, но e=3
             SimpleCert tricky_cert = sign_csr(tricky_csr, ca_cert, ca_d, ca_n);
@@ -777,12 +778,11 @@ void check_func()
 
             long long recovered_tricky_hash = mod_exp(tricky_signature, 3, cert_client_n);
             if (recovered_tricky_hash == actual_evil_hash) {
-                std::cout << "Изощрённая подделка подписи прошла проверку! Критическая уязвимость.\n";
-                MessageBeep(MB_ICONASTERISK);
-                MessageBox(0, _T("КАПЕЦ!"), _T("ВЗЛОМАНО!"), MB_ICONERROR);
+                log_stream << _T("Изощрённая подделка подписи прошла проверку! Критическая уязвимость.\n");
+                MessageBox(0, log_buffer.str().c_str(), _T("ВЗЛОМАНО!"), MB_ICONERROR);
             }
             else {
-                std::cout << "Изощрённая подделка не удалась.\n";
+                log_stream << _T("Изощрённая подделка не удалась.\n");
 
             }
         }
