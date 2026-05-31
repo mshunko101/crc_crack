@@ -4,6 +4,15 @@
 
 Время буквально заявленяет. Нет! Это легко!.
 
+# Ardunio 
+
+<p align="center">
+ <img src="https://github.com/mshunko101/science/blob/7c6e3e5cfa85d85c384f5abae399ef13040aaab3/0.%20docs/%D0%9C%D0%B5%D0%B4%D0%B8%D0%B0/0-02-05-ac4b1823b740a2f858b1b2623f663f340d87b5cb2c3d5939b4bfbcff368059b9_da73508fab7432ce.jpg" width="500"/>
+</p>
+
+*Рис. 1. В зеленой коробочке графитовые стержни от солевых батареек, внутри датчик сопротивления воздуха.*
+
+
 # Литература и ссылки.
 
 1. [Системотический анализ природы вещей](https://github.com/mshunko101/science/tree/main/1.%20Диссертация)
