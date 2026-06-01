@@ -619,7 +619,7 @@ void CSensorMonitorDlg::UpdateMetrics()
         Vector3 b(m_dataBuffer[m_dataBuffer.size() - 2].value);
         m_angle = angle_between(a, b);
         double stable = angle_between(*m_start_point, a);
-        if (m_angle > 0.002 || stable < 0.0000001)
+        if (m_angle > 0.001 || stable < 0.0000001)
         {
             conditionStr = L"ВЫПОЛНЕНО";
             conditionColor = RGB(76, 175, 80); // Зелёный  
