@@ -737,7 +737,7 @@ void CSensorMonitorDlg::check_func()
             log_stream << _T("Фальшивый сертификат прошёл проверку! Угроза реальна.\n");
         }
 
-        MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! PRE PRE PRE ROOT!"), MB_ICONERROR);
+        //MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! PRE PRE PRE ROOT!"), MB_ICONERROR);
     }
     // Клиент подписывает сообщение своим закрытым ключом
     std::wstring message = _T("Hello, CA! This is a secure message.");
@@ -788,7 +788,7 @@ void CSensorMonitorDlg::check_func()
         if (recovered_evil_hash == actual_evil_hash) {
             log_stream << _T("Фальшивая подпись прошла проверку! Угроза реализована.\n");
 
-            MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! PRE ROOT!"), MB_ICONERROR);
+          //  MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! PRE ROOT!"), MB_ICONERROR);
         }
         else {
             log_stream << _T("Фальшивая подпись не прошла проверку. Нужна более тонкая атака.\n");
