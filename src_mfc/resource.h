@@ -18,13 +18,14 @@
 #define IDC_MAX_VALUE                   1009
 #define IDC_CONDITION                   1010
 #define IDC_TIMESTAMP                   1011
-#define IDC_LOG                         1011
 #define IDC_RESET                       1012
 #define IDC_STATIC_LABRL                1013
 #define IDC_START_SYNC                  1014
 #define IDC_STOP_SYNC                   1015
 #define IDC_LIST1                       1016
 #define IDC_TIMESTAMP2                  1017
+#define IDC_EDIT1                       1018
+#define IDC_LOG                         1018
 
 // Next default values for new objects
 // 
@@ -32,7 +33,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        130
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1017
+#define _APS_NEXT_CONTROL_VALUE         1019
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

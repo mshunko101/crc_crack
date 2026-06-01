@@ -328,7 +328,7 @@ void CSensorMonitorDlg::DoDataExchange(CDataExchange* pDX)
     DDX_Control(pDX, IDC_MIN_VALUE, m_ctrlMinValue);
     DDX_Control(pDX, IDC_MAX_VALUE, m_ctrlMaxValue);
     DDX_Control(pDX, IDC_CONDITION, m_ctrlCondition);
-    DDX_Control(pDX, IDC_TIMESTAMP, m_ctrlTimestamp);
+    DDX_Control(pDX, IDC_TIMESTAMP2, m_ctrlTimestamp);
     DDX_Control(pDX, IDC_LIST1, m_ctrlList);
 }
 
@@ -671,13 +671,13 @@ void CSensorMonitorDlg::UpdateMetrics()
     // Проверка условия balance > 0 && currentDiff < 0
     CString conditionStr;
     COLORREF conditionColor;
-   
+    double stable = 0;
     if (m_dataBuffer.size() > 2)
     {
         Vector3 a(m_dataBuffer[m_dataBuffer.size() - 1].value);
         Vector3 b(m_dataBuffer[m_dataBuffer.size() - 2].value);
         m_angle = angle_between(a, b);
-        double stable = angle_between(*m_start_point, a);
+        stable = angle_between(*m_start_point, a);
         if (m_angle > 0.001 || stable < 0.0000001)
         {
             conditionStr = L"ВЫПОЛНЕНО";
@@ -700,11 +700,11 @@ void CSensorMonitorDlg::UpdateMetrics()
     // Для изменения цвета текста потребуется дополнительный обработчик WM_CTLCOLOR
             // Обновление временной метки
     CString timestamp;
-    timestamp.Format(L"Обновлено: %02d:%02d:%02d | Точек данных: %d  %lf",
+    timestamp.Format(L"Обновлено: %02d:%02d:%02d | Точек данных: %d  %lf    %lf",
         CTime::GetCurrentTime().GetHour(),
         CTime::GetCurrentTime().GetMinute(),
         CTime::GetCurrentTime().GetSecond(),
-        m_dataBuffer.size(), m_angle);
+        m_dataBuffer.size(), m_angle, stable);
     m_ctrlTimestamp.SetWindowText(timestamp);
 
 }
