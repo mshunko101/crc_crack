@@ -300,7 +300,7 @@ void CSensorMonitorDlg::spasiboEva()
     m_controlSystem->addActuator(new EntropyEaterRNG());
     m_controlSystem->addActuator(new EntropyEaterRNG());
     m_controlSystem->addActuator(new EntropyEaterRNG());
-    m_controlSystem->strategyBasedControl();
+    m_controlSystem->findOptimalTimeSequential();
 }
 
 void CSensorMonitorDlg::OnBnClickedStop()
