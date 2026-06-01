@@ -596,7 +596,7 @@ void CSensorMonitorDlg::UpdateMetrics()
         Vector3 a(m_dataBuffer[m_dataBuffer.size() - 1].value);
         Vector3 b(m_dataBuffer[m_dataBuffer.size() - 2].value);
         m_angle = angle_between(a, b);
-        if (m_angle > 0.003)
+        if (m_angle > 0.002)
         {
             conditionStr = L"ВЫПОЛНЕНО";
             conditionColor = RGB(76, 175, 80); // Зелёный  
@@ -713,6 +713,7 @@ void CSensorMonitorDlg::check_func()
     long long evil_e = 0;
     // Демонстрация: что может сделать злоумышленник, если взломал ключ УЦ
     if (attack_success) {
+
         log_stream << _T("\n--- ДЕМОНСТРАЦИЯ ЗЛОУМЫШЛЕННЫХ ДЕЙСТВИЙ ---\n");
         // Злоумышленник создаёт фальшивый CSR
         std::map<std::wstring, std::wstring> evil_subject;
@@ -735,6 +736,8 @@ void CSensorMonitorDlg::check_func()
         if (verify_cert(evil_cert, ca_cert)) {
             log_stream << _T("Фальшивый сертификат прошёл проверку! Угроза реальна.\n");
         }
+
+        MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! PRE PRE PRE ROOT!"), MB_ICONERROR);
     }
     // Клиент подписывает сообщение своим закрытым ключом
     std::wstring message = _T("Hello, CA! This is a secure message.");
@@ -784,6 +787,8 @@ void CSensorMonitorDlg::check_func()
 
         if (recovered_evil_hash == actual_evil_hash) {
             log_stream << _T("Фальшивая подпись прошла проверку! Угроза реализована.\n");
+
+            MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! PRE ROOT!"), MB_ICONERROR);
         }
         else {
             log_stream << _T("Фальшивая подпись не прошла проверку. Нужна более тонкая атака.\n");
@@ -803,7 +808,7 @@ void CSensorMonitorDlg::check_func()
             long long recovered_tricky_hash = mod_exp(tricky_signature, 3, cert_client_n);
             if (recovered_tricky_hash == actual_evil_hash) {
                 log_stream << _T("Изощрённая подделка подписи прошла проверку! Критическая уязвимость.\n");
-                MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО!"), MB_ICONERROR);
+                MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! ROOT!"), MB_ICONERROR);
             }
             else {
                 log_stream << _T("Изощрённая подделка не удалась.\n");
