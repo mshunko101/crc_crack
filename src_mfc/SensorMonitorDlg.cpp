@@ -1,6 +1,7 @@
 ﻿#include "pch.h"
 #include "SensorMonitor.h"
-#include "SensorMonitorDlg.h"
+#include "SensorMonitorDlg.h" 
+#include <thread>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -224,15 +225,15 @@ private:
 };
 
 
-
-
-
 BEGIN_MESSAGE_MAP(CSensorMonitorDlg, CDialogEx)
     ON_BN_CLICKED(IDC_START, &CSensorMonitorDlg::OnBnClickedStart)
     ON_BN_CLICKED(IDC_STOP, &CSensorMonitorDlg::OnBnClickedStop)
     ON_BN_CLICKED(IDC_RESET, &CSensorMonitorDlg::OnBnClickedReset)
+    ON_BN_CLICKED(IDC_START_SYNC, &CSensorMonitorDlg::OnBnClickedStartSync)
+    ON_BN_CLICKED(IDC_STOP_SYNC, &CSensorMonitorDlg::OnBnClickedStopSync)
     ON_WM_TIMER()
     ON_WM_CTLCOLOR()
+    ON_LBN_SELCHANGE(IDC_LIST1, &CSensorMonitorDlg::SelChange)
 END_MESSAGE_MAP()
 
 CSensorMonitorDlg::CSensorMonitorDlg(CWnd* pParent)
@@ -260,12 +261,12 @@ void CSensorMonitorDlg::DoDataExchange(CDataExchange* pDX)
     DDX_Control(pDX, IDC_MAX_VALUE, m_ctrlMaxValue);
     DDX_Control(pDX, IDC_CONDITION, m_ctrlCondition);
     DDX_Control(pDX, IDC_TIMESTAMP, m_ctrlTimestamp);
+    DDX_Control(pDX, IDC_LIST1, m_ctrlList);
 }
 
 BOOL CSensorMonitorDlg::OnInitDialog()
 {
     CDialogEx::OnInitDialog();
-
     // Инициализация элементов управления
     m_ctrlCurrentValue.SetWindowText(L"Нет данных");
     m_ctrlCurrentDiff.SetWindowText(L"Недостаточно данных");
@@ -276,15 +277,28 @@ BOOL CSensorMonitorDlg::OnInitDialog()
     m_ctrlMaxValue.SetWindowText(L"Нет данных");
     m_ctrlCondition.SetWindowText(L"НЕТ ДАННЫХ");
     m_ctrlTimestamp.SetWindowText(L"");
-
+      
     return TRUE;
 }
 
 void CSensorMonitorDlg::OnBnClickedStart()
 {
     StartSerial();
-    m_nTimerID = SetTimer(1, 1000, nullptr); // Обновление каждую секунду
+    m_nTimerID = SetTimer(1, 1000, nullptr);
+}
+
+void CSensorMonitorDlg::OnBnClickedStartSync()
+{
     m_thread = std::thread(&CSensorMonitorDlg::spasiboEva, this);
+}
+
+void CSensorMonitorDlg::OnBnClickedStopSync()
+{
+    if (m_thread.joinable()) 
+    {
+        TerminateThread(m_thread.native_handle(), 0);
+        m_thread.detach();
+    }
 }
 
 void CSensorMonitorDlg::spasiboEva()
@@ -300,7 +314,7 @@ void CSensorMonitorDlg::spasiboEva()
     m_controlSystem->addActuator(new EntropyEaterRNG());
     m_controlSystem->addActuator(new EntropyEaterRNG());
     m_controlSystem->addActuator(new EntropyEaterRNG());
-    m_controlSystem->findOptimalTimeSequential();
+    m_controlSystem->adaptiveSimultaneousControl();
 }
 
 void CSensorMonitorDlg::OnBnClickedStop()
@@ -427,6 +441,17 @@ BOOL CSensorMonitorDlg::SendCommandAndReadResponse(HANDLE hCom, CString& outResp
 double CSensorMonitorDlg::read()
 {
     return m_angle;
+}
+
+void CSensorMonitorDlg::SelChange()
+{
+    int nSel = m_ctrlList.GetCurSel();
+    if (nSel != LB_ERR)
+    {
+        CString strItem;
+        CString* data = (CString*)m_ctrlList.GetItemData(nSel);
+        SetDlgItemText(IDC_LOG, *data);
+    }
 }
 
 
@@ -704,6 +729,8 @@ void CSensorMonitorDlg::check_func()
     if (attack_success) {
         log_stream << _T("\n=== АТАКА УСПЕШНА: злоумышленник восстановил закрытый ключ УЦ! ===\n");
         log_stream << _T("Теперь он может подписывать любые сертификаты от имени УЦ.\n");
+
+        m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом 1")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
     }
     else {
         log_stream << _T("\n=== АТАКА НЕ УДАЛАСЬ: ключ УЦ защищён. ===\n");
@@ -735,6 +762,7 @@ void CSensorMonitorDlg::check_func()
         // Попытка проверки — в нашей системе она пройдёт, потому что подпись валидна!
         if (verify_cert(evil_cert, ca_cert)) {
             log_stream << _T("Фальшивый сертификат прошёл проверку! Угроза реальна.\n");
+            m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом 2")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
         }
 
         //MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! PRE PRE PRE ROOT!"), MB_ICONERROR);
@@ -786,9 +814,11 @@ void CSensorMonitorDlg::check_func()
         long long actual_evil_hash = simple_hash(evil_message, cert_client_n);
 
         if (recovered_evil_hash == actual_evil_hash) {
-            log_stream << _T("Фальшивая подпись прошла проверку! Угроза реализована.\n");
+           
+                log_stream << _T("Фальшивая подпись прошла проверку! Угроза реализована.\n");
 
-          //  MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! PRE ROOT!"), MB_ICONERROR);
+            m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом 3")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
+             
         }
         else {
             log_stream << _T("Фальшивая подпись не прошла проверку. Нужна более тонкая атака.\n");
@@ -808,6 +838,9 @@ void CSensorMonitorDlg::check_func()
             long long recovered_tricky_hash = mod_exp(tricky_signature, 3, cert_client_n);
             if (recovered_tricky_hash == actual_evil_hash) {
                 log_stream << _T("Изощрённая подделка подписи прошла проверку! Критическая уязвимость.\n");
+
+           //     m_ctrlList.InsertItem(0, 0, _T("Взлом 4"), 0, 0, 0, (LPARAM)new CString(log_buffer.str().c_str()));
+                m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом 4")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
                 MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! ROOT!"), MB_ICONERROR);
             }
             else {
@@ -816,6 +849,7 @@ void CSensorMonitorDlg::check_func()
             }
         }
     }
+    UpdateData(0);
 }
 
 

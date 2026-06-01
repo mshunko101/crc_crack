@@ -33,8 +33,11 @@ private:
     void UpdateMetrics();
     void ClearOldData();
     BOOL SendCommandAndReadResponse(HANDLE hCom, CString& outResponse);
+    void OnBnClickedStartSync();
+    void OnBnClickedStopSync();
     void spasiboEva();
     void check_func();
+    void SelChange();
     double read() override;
     // COM-порт
     HANDLE m_hSerial;
@@ -59,6 +62,7 @@ private:
     CStatic m_ctrlTimestamp;
     volatile double m_angle;
     ControlSystem* m_controlSystem;
+    CListBox m_ctrlList;
     // Таймер для обновления интерфейса
     UINT_PTR m_nTimerID;
 };
