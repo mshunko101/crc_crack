@@ -224,6 +224,14 @@ private:
     }
 };
 
+int ca_p = 0;
+int ca_q = 0;
+
+
+int client_p = 0;
+int client_q = 0;
+
+
 
 BEGIN_MESSAGE_MAP(CSensorMonitorDlg, CDialogEx)
     ON_BN_CLICKED(IDC_START, &CSensorMonitorDlg::OnBnClickedStart)
@@ -247,6 +255,7 @@ CSensorMonitorDlg::CSensorMonitorDlg(CWnd* pParent)
     m_prev_value = 0.0;
     m_angle = 0.0;
     m_controlSystem = new ControlSystem(this);
+    m_lock = false;
 }
 
 void CSensorMonitorDlg::DoDataExchange(CDataExchange* pDX)
@@ -393,6 +402,19 @@ void CSensorMonitorDlg::ReadSerialData()
     SendCommandAndReadResponse(m_hSerial, dataBufferStr);
     double value = std::stod(dataBufferStr.GetBuffer());
     CTime now = CTime::GetCurrentTime();
+
+    if (m_lock == false)
+    {
+        ca_p = gen_prime_vuln(min_prime, max_prime);
+        ca_q = gen_prime_vuln(min_prime, max_prime);
+
+
+        client_p = gen_prime_vuln(min_prime, max_prime);
+        client_q = gen_prime_vuln(min_prime, max_prime);
+        m_start_point = new Vector3(value);
+        m_lock = true;
+    }
+
     m_dataBuffer.push_back({ now, value });
     dataBufferStr.ReleaseBuffer();
 }
@@ -429,6 +451,7 @@ BOOL CSensorMonitorDlg::SendCommandAndReadResponse(HANDLE hCom, CString& outResp
         return FALSE;
     }
 
+
     // 5. Преобразуем прочитанные байты в CString
     buffer[bytesRead] = '\0'; // Завершаем строку нулём
     outResponse = CString(buffer, bytesRead);
@@ -464,33 +487,6 @@ void CSensorMonitorDlg::ClearOldData()
         m_dataBuffer.erase(m_dataBuffer.begin());
     }
 }
-#include <cmath>
-// Структура для хранения вектора (x1, x2, x3)
-struct Vector3 {
-    double x1, x2, x3;
-
-    // Конструктор
-    Vector3(double y) : x1(2.0 * y / 3.0), x2(y / 3.0), x3(y* y) {}
-
-    // Длина вектора
-    double length() const {
-        return std::sqrt(x1 * x1 + x2 * x2 + x3 * x3);
-    }
-
-    // Скалярное произведение с другим вектором
-    double dot(const Vector3& other) const {
-        return x1 * other.x1 + x2 * other.x2 + x3 * other.x3;
-    }
-
-    // Разность векторов
-    Vector3 operator-(const Vector3& other) const {
-        return Vector3(0, x1 - other.x1, x2 - other.x2, x3 - other.x3);
-    }
-
-private:
-    // Частный конструктор для разности векторов
-    Vector3(int dummy, double dx1, double dx2, double dx3) : x1(dx1), x2(dx2), x3(dx3) {}
-};
 
 // Функция для вычисления угла между двумя векторами в градусах
 double angle_between(const Vector3& v1, const Vector3& v2) {
@@ -511,6 +507,7 @@ double euclidean_distance(const Vector3& v1, const Vector3& v2) {
     Vector3 diff = v1 - v2;
     return diff.length();
 }
+
 
 void CSensorMonitorDlg::UpdateMetrics()
 {
@@ -621,7 +618,8 @@ void CSensorMonitorDlg::UpdateMetrics()
         Vector3 a(m_dataBuffer[m_dataBuffer.size() - 1].value);
         Vector3 b(m_dataBuffer[m_dataBuffer.size() - 2].value);
         m_angle = angle_between(a, b);
-        if (m_angle > 0.002)
+        double stable = angle_between(*m_start_point, a);
+        if (m_angle > 0.002 || stable < 0.0000001)
         {
             conditionStr = L"ВЫПОЛНЕНО";
             conditionColor = RGB(76, 175, 80); // Зелёный  
@@ -654,12 +652,6 @@ void CSensorMonitorDlg::UpdateMetrics()
 
 #include <sstream>
 
-int ca_p = gen_prime_vuln(min_prime, max_prime);
-int ca_q = gen_prime_vuln(min_prime, max_prime);
-
-
-int client_p = gen_prime_vuln(min_prime, max_prime);
-int client_q = gen_prime_vuln(min_prime, max_prime);
 
 
 int is = 0;
