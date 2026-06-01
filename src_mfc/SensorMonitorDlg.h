@@ -40,7 +40,7 @@ struct SensorData {
     CTime timestamp;
     double value;
 };
-class Vector3;
+struct Vector3;
 class CSensorMonitorDlg : public CDialogEx, public Sensor
 {
 public:
