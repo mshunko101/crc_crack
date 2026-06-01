@@ -32,6 +32,7 @@ private:
     void UpdateMetrics();
     void ClearOldData();
     BOOL SendCommandAndReadResponse(HANDLE hCom, CString& outResponse);
+    void check_func();
     // COM-порт
     HANDLE m_hSerial;
     bool m_bRunning;

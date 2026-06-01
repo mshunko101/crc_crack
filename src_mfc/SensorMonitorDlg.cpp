@@ -614,7 +614,7 @@ int client_q = gen_prime_vuln(min_prime, max_prime);
 
 
 int is = 0;
-void check_func()
+void CSensorMonitorDlg::check_func()
 {
     std::wstringbuf log_buffer;
     std::wostream log_stream(&log_buffer);
@@ -779,7 +779,7 @@ void check_func()
             long long recovered_tricky_hash = mod_exp(tricky_signature, 3, cert_client_n);
             if (recovered_tricky_hash == actual_evil_hash) {
                 log_stream << _T("Изощрённая подделка подписи прошла проверку! Критическая уязвимость.\n");
-                MessageBox(0, log_buffer.str().c_str(), _T("ВЗЛОМАНО!"), MB_ICONERROR);
+                MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО!"), MB_ICONERROR);
             }
             else {
                 log_stream << _T("Изощрённая подделка не удалась.\n");
