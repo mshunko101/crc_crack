@@ -244,6 +244,8 @@ CSensorMonitorDlg::CSensorMonitorDlg(CWnd* pParent)
     m_balance_step = 0;
     m_diffs_step = 0;
     m_prev_value = 0.0;
+    m_angle = 0.0;
+    m_controlSystem = new ControlSystem(this);
 }
 
 void CSensorMonitorDlg::DoDataExchange(CDataExchange* pDX)
@@ -282,6 +284,23 @@ void CSensorMonitorDlg::OnBnClickedStart()
 {
     StartSerial();
     m_nTimerID = SetTimer(1, 1000, nullptr); // Обновление каждую секунду
+    m_thread = std::thread(&CSensorMonitorDlg::spasiboEva, this);
+}
+
+void CSensorMonitorDlg::spasiboEva()
+{
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->addActuator(new EntropyEaterRNG());
+    m_controlSystem->strategyBasedControl();
 }
 
 void CSensorMonitorDlg::OnBnClickedStop()
@@ -403,6 +422,11 @@ BOOL CSensorMonitorDlg::SendCommandAndReadResponse(HANDLE hCom, CString& outResp
     SetDlgItemText(IDC_STATIC_LABRL, outResponse);
 
     return TRUE;
+}
+
+double CSensorMonitorDlg::read()
+{
+    return m_angle;
 }
 
 
@@ -566,13 +590,13 @@ void CSensorMonitorDlg::UpdateMetrics()
     // Проверка условия balance > 0 && currentDiff < 0
     CString conditionStr;
     COLORREF conditionColor;
-    double angle = 0;
+   
     if (m_dataBuffer.size() > 2)
     {
         Vector3 a(m_dataBuffer[m_dataBuffer.size() - 1].value);
         Vector3 b(m_dataBuffer[m_dataBuffer.size() - 2].value);
-        angle = angle_between(a, b);
-        if (angle_between(a,b) > 0.001)
+        m_angle = angle_between(a, b);
+        if (m_angle > 0.003)
         {
             conditionStr = L"ВЫПОЛНЕНО";
             conditionColor = RGB(76, 175, 80); // Зелёный  
@@ -598,7 +622,7 @@ void CSensorMonitorDlg::UpdateMetrics()
         CTime::GetCurrentTime().GetHour(),
         CTime::GetCurrentTime().GetMinute(),
         CTime::GetCurrentTime().GetSecond(),
-        m_dataBuffer.size(), angle);
+        m_dataBuffer.size(), m_angle);
     m_ctrlTimestamp.SetWindowText(timestamp);
 
 }

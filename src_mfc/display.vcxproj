@@ -183,6 +183,8 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CManipulator.h" />
+    <ClInclude Include="randpp.h" />
     <ClInclude Include="SensorMonitor.h" />
     <ClInclude Include="SensorMonitorDlg.h" />
     <ClInclude Include="framework.h" />
@@ -191,6 +193,7 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CManipulator.cpp" />
     <ClCompile Include="SensorMonitor.cpp" />
     <ClCompile Include="SensorMonitorDlg.cpp" />
     <ClCompile Include="pch.cpp">

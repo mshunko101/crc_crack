@@ -2,6 +2,7 @@
 #include <afxwin.h>
 #include <list>
 #include <string>
+#include "CManipulator.h"
 
 // Структура для хранения данных с временной меткой
 struct SensorData {
@@ -9,7 +10,7 @@ struct SensorData {
     double value;
 };
 
-class CSensorMonitorDlg : public CDialogEx
+class CSensorMonitorDlg : public CDialogEx, public Sensor
 {
 public:
     CSensorMonitorDlg(CWnd* pParent = nullptr);
@@ -32,7 +33,9 @@ private:
     void UpdateMetrics();
     void ClearOldData();
     BOOL SendCommandAndReadResponse(HANDLE hCom, CString& outResponse);
+    void spasiboEva();
     void check_func();
+    double read() override;
     // COM-порт
     HANDLE m_hSerial;
     bool m_bRunning;
@@ -40,6 +43,7 @@ private:
     double m_diffs_step;
     double m_prev_value;
     double m_prev_value_sq;
+    std::thread m_thread;
     // Буфер данных за последние 3 минуты
     std::vector<SensorData> m_dataBuffer;
 
@@ -53,7 +57,8 @@ private:
     CStatic m_ctrlMaxValue;
     CStatic m_ctrlCondition;
     CStatic m_ctrlTimestamp;
-
+    volatile double m_angle;
+    ControlSystem* m_controlSystem;
     // Таймер для обновления интерфейса
     UINT_PTR m_nTimerID;
 };
