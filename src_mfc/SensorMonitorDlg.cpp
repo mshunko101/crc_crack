@@ -173,11 +173,18 @@ public:
     static void seed() {
         if (m_rng != nullptr)
         {
-            m_rng = new RNG(time(0), 73.8);
+            delete m_rng;
         }
+        m_rng = new RNG(time(0), 73.8);
     }
     static long long  rand_int(long long  low, long long  high) {
-        uint32_t random_dword = static_cast<uint32_t>(m_rng->generate(32));
+        if (m_rng == nullptr)
+        {
+            m_rng = new RNG(time(0), 73.8);
+        }
+        double m = m_rng->generate(32);
+        long long random_dword = 0;
+        memcpy(&random_dword, &m, sizeof(double));
         return low + random_dword % (high - low + 1);
     }
 };
