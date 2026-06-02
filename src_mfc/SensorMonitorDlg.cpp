@@ -762,7 +762,7 @@ void CSensorMonitorDlg::check_func()
     time_t start_time = time(0);
     log_stream << _T("=== СИМУЛЯЦИЯ АТАКИ НА СЛАБЫЙ ГПСЧ ===\n");
     log_stream << _T("Запуск системы в момент ") << start_time << _T(" (это наша точка отсчёта)\n\n");
-
+    bool add_to_log = false;
       // Включаем уязвимое окно на 5 сек — именно в этот момент будут генерироваться ключи
     VulnerableRNG::is_weak_window = false;
     VulnerableRNG::seed();
@@ -824,8 +824,7 @@ void CSensorMonitorDlg::check_func()
     if (attack_success) {
         log_stream << _T("\n=== АТАКА УСПЕШНА: злоумышленник восстановил закрытый ключ УЦ! ===\n");
         log_stream << _T("Теперь он может подписывать любые сертификаты от имени УЦ.\n");
-
-        m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом 1")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
+        add_to_log = true;
     }
     else {
         log_stream << _T("\n=== АТАКА НЕ УДАЛАСЬ: ключ УЦ защищён. ===\n");
@@ -857,7 +856,7 @@ void CSensorMonitorDlg::check_func()
         // Попытка проверки — в нашей системе она пройдёт, потому что подпись валидна!
         if (verify_cert(evil_cert, ca_cert)) {
             log_stream << _T("Фальшивый сертификат прошёл проверку! Угроза реальна.\n");
-            m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом 2")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
+            add_to_log = true;
         }
 
         //MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! PRE PRE PRE ROOT!"), MB_ICONERROR);
@@ -912,7 +911,8 @@ void CSensorMonitorDlg::check_func()
            
                 log_stream << _T("Фальшивая подпись прошла проверку! Угроза реализована.\n");
 
-            m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом 3")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
+
+            add_to_log = true;
              
         }
         else {
@@ -935,7 +935,6 @@ void CSensorMonitorDlg::check_func()
                 log_stream << _T("Изощрённая подделка подписи прошла проверку! Критическая уязвимость.\n");
 
            //     m_ctrlList.InsertItem(0, 0, _T("Взлом 4"), 0, 0, 0, (LPARAM)new CString(log_buffer.str().c_str()));
-                m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом 4")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
                 MessageBox(log_buffer.str().c_str(), _T("ВЗЛОМАНО! ROOT!"), MB_ICONERROR);
             }
             else {
@@ -944,7 +943,11 @@ void CSensorMonitorDlg::check_func()
             }
         }
     }
-    UpdateData(0);
+    if (add_to_log)
+    {
+        m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом +")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
+        UpdateData(0);
+    }
 }
 
 
