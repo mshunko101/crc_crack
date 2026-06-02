@@ -165,18 +165,24 @@ bool is_prime(long long n) {
     return true;
 }
 
-
 // === УЯЗВИМЫЙ ГПСЧ: слаб в первые 10 секунд ===
 class VulnerableRNG {
+    static RNG* m_rng;
 public:
     static bool is_weak_window; // true в первые 10 сек
     static void seed() {
-        srand(static_cast<unsigned int>(time(0) ^ 12345));
+        if (m_rng != nullptr)
+        {
+            m_rng = new RNG(time(0), 73.8);
+        }
     }
     static long long  rand_int(long long  low, long long  high) {
-        return low + rand() % (high - low + 1);
+        uint32_t random_dword = static_cast<uint32_t>(m_rng->generate(32));
+        return low + random_dword % (high - low + 1);
     }
 };
+
+RNG* VulnerableRNG::m_rng = nullptr;
 
 bool VulnerableRNG::is_weak_window = true;
 
@@ -317,7 +323,7 @@ private:
     long long gen_prime_trial(long long low, long long high) {
         long long p;
         do {
-            p = low + rand() % (high - low + 1); // Используем текущий rand()
+            p = VulnerableRNG::rand_int(low, high); // Используем текущий rand()
         } while (!is_prime(p));
         return p;
     }
