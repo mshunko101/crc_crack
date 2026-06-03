@@ -167,29 +167,25 @@ bool is_prime(long long n) {
 
 // === УЯЗВИМЫЙ ГПСЧ: слаб в первые 10 секунд ===
 class VulnerableRNG {
-    static RNG* m_rng;
+    static std::random_device* rd;  // источник энтропии (если доступен)
+    static std::mt19937* gen; // генератор Мерсенна-Твистера
 public:
     static bool is_weak_window; // true в первые 10 сек
     static void seed() {
-        if (m_rng != nullptr)
-        {
-            delete m_rng;
-        }
-        m_rng = new RNG(time(0), 73.8);
     }
     static long long  rand_int(long long  low, long long  high) {
-        if (m_rng == nullptr)
+  
+        if (rd == nullptr)
         {
-            m_rng = new RNG(time(0), 73.8);
+            rd = new std::random_device();
+            gen = new std::mt19937((*rd)());
         }
-        double m = m_rng->generate(32);
-        long long random_dword = 0;
-        memcpy(&random_dword, &m, sizeof(double));
-        return low + random_dword % (high - low + 1);
+        std::uniform_int_distribution<long long> dist(low, high);
+        return low + dist(*gen) % (high - low + 1);
     }
 };
-
-RNG* VulnerableRNG::m_rng = nullptr;
+std::random_device* VulnerableRNG::rd;
+std::mt19937* VulnerableRNG::gen;
 
 bool VulnerableRNG::is_weak_window = true;
 
