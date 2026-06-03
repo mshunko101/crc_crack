@@ -7,8 +7,8 @@
 #define new DEBUG_NEW
 #endif
 
-#define min_prime 1000000
-#define max_prime 1000000000
+#define min_prime 10000
+#define max_prime 20000
 
 
 #include <iostream>
@@ -295,8 +295,8 @@ bool verify_cert(const SimpleCert& cert, const SimpleCert& ca_cert) {
 class Attacker {
 public:
     // Перебираем семена в предполагаемом временном окне (±30 сек от T)
-    bool crack_rsa_key(long long n, long long e, time_t approx_time) {
-        std::cout << "Атака: перебор семян около времени " << approx_time << "\n";
+    bool crack_rsa_key(long long n, long long e, time_t approx_time, std::wostream &log) {
+        log << _T("Атака: перебор семян около времени ") << approx_time << _T("\n");
         for (int offset = -30; offset <= 30; ++offset) {
             time_t candidate_seed = approx_time + offset;
             srand(static_cast<unsigned int>(candidate_seed));
@@ -308,16 +308,16 @@ public:
                 long long n_candidate = (long long)p_candidate * q_candidate;
 
                 if (n_candidate == n) {
-                    std::cout << "ВЗЛОМ УСПЕШЕН! Найдено p=" << p_candidate
-                        << ", q=" << q_candidate << "\n";
+                    log << _T("ВЗЛОМ УСПЕШЕН! Найдено p=") << p_candidate
+                        << _T(", q=") << q_candidate << _T("\n");
                     long long phi = (long long)(p_candidate - 1) * (q_candidate - 1);
                     long long d_cracked = mod_inv(e, phi);
-                    std::cout << "Восстановлен закрытый ключ d=" << d_cracked << "\n";
+                    log << _T("Восстановлен закрытый ключ d=") << d_cracked << _T("\n");
                     return true;
                 }
             }
         }
-        std::cout << "Атака не удалась — ключ не взломан.\n";
+        log << _T("Атака не удалась — ключ не взломан.\n");
         return false;
     }
 
@@ -818,17 +818,17 @@ void CSensorMonitorDlg::check_func()
        // Проверка сертификата клиента с помощью открытого ключа УЦ
     if (verify_cert(client_cert, ca_cert)) 
     {
-        log_stream << "Проверка сертификата: ПРОЙДЕНА! Сертификат доверен.\n";
+        log_stream << _T("Проверка сертификата: ПРОЙДЕНА! Сертификат доверен.\n");
     }
     else {
-        log_stream << "Проверка сертификата: НЕ ПРОЙДЕНА!\n";
+        log_stream << _T("Проверка сертификата: НЕ ПРОЙДЕНА!\n");
         return;
     }
      
     // === АТАКА НА КЛЮЧ УЦ ===
     log_stream << _T("\n=== ЗАПУСК АТАКИ ") << is++ << _T(" НА КЛЮЧ УЦ ===\n");
     Attacker attacker;
-    bool attack_success = attacker.crack_rsa_key(ca_n, ca_e, start_time);
+    bool attack_success = attacker.crack_rsa_key(ca_n, ca_e, start_time, log_stream );
 
     if (attack_success) {
         log_stream << _T("\n=== АТАКА УСПЕШНА: злоумышленник восстановил закрытый ключ УЦ! ===\n");
