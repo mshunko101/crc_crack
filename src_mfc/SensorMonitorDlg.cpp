@@ -1,4 +1,7 @@
 ﻿#include "pch.h"
+#undef min
+#undef max
+#include "../uint256_t/uint256_t.h"
 #include "SensorMonitor.h"
 #include "SensorMonitorDlg.h" 
 #include <thread>
@@ -6,12 +9,20 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
-#undef min
-#undef max
-#define min_prime 1
-#define max_prime sqrt(std::numeric_limits<unsigned unsigned long long>::max())
+
+typedef uint256_t sing_value_type;
+
+#define min_prime std::numeric_limits<long long>::max()
+#define max_prime std::numeric_limits<unsigned long long>::max()
 
 
+std::string to_string(sing_value_type vt)
+{
+    return vt.str();
+}
+
+
+const sing_value_type zero(0);
 #include <iostream>
 #include <string>
 #include <map>
@@ -26,6 +37,29 @@ std::wstring string_to_wstring(const std::string& str) {
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
     return converter.from_bytes(str);
 }
+
+sing_value_type isqrt(sing_value_type n) {
+    if (n == zero) return 0;
+    sing_value_type lo = 1, hi = n;
+    // можно ускорить hi: если n > 0, то корень <= n/2+1, но для простоты оставим так
+    sing_value_type ans = 1;
+
+    while (lo <= hi) {
+        sing_value_type mid = lo + (hi - lo) / 2;
+        // mid * mid может переполнить 256 бит, поэтому нужна защита
+        // самый простой способ для отладки: взять модуль побольше или временно использовать 128-битные тесты
+        // здесь сделаем аккуратно: если mid > n / mid, то mid*mid > n
+        if (mid > n / mid) {
+            hi = mid - 1;
+        }
+        else {
+            ans = mid;
+            lo = mid + 1;
+        }
+    }
+    return ans;
+}
+
 
 // Упрощённый «сертификат»: просто набор пар «ключ-значение» + подпись
 struct SimpleCert {
@@ -98,18 +132,9 @@ struct CSR {
 };
 
  
-
-#include <iostream>
-#include <string>
-#include <map>
-#include <cstdlib>
-#include <ctime>
-#include <thread>
-#include <chrono>
-
 // Модульное умножение с защитой от переполнения: (a * b) mod m
-unsigned long long mod_mul(unsigned long long a, unsigned long long b, unsigned long long m) {
-    unsigned long long res = 0;
+sing_value_type mod_mul(sing_value_type a, sing_value_type b, sing_value_type m) {
+    sing_value_type res = 0;
     a %= m;
     while (b > 0) {
         if (b & 1) res = (res + a) % m;
@@ -119,52 +144,68 @@ unsigned long long mod_mul(unsigned long long a, unsigned long long b, unsigned 
     return res;
 }
 
-// Быстрое возведение в степень по модулю (a^b mod m)
-unsigned long long mod_exp(unsigned long long a, unsigned long long b, unsigned long long m) {
-    if (m == 1) return 0;
-    unsigned long long res = 1;
-    a = a % m;
-    while (b > 0) {
-        if (b & 1) res = mod_mul(res, a, m);
-        b = b >> 1;
-        a = mod_mul(a, a, m);
+// mod_inv для sing_value_type через расширенный Евклид (упрощённо)
+sing_value_type mod_inv(sing_value_type e, sing_value_type mod) {
+    sing_value_type t = 0, newt = 1;
+    sing_value_type r = mod, newr = e;
+
+    while (newr != zero) {
+        sing_value_type q = r / newr;
+        // r, newr = newr, r - q*newr
+        sing_value_type tmp = r - q * newr; r = newr; newr = tmp;
+        // t, newt = newt, t - q*newt
+        sing_value_type tmp2 = t - q * newt; t = newt; newt = tmp2;
     }
-    return res;
+    if (r > 1) return 0; // обратного нет
+    if (t < 0) t += mod; // в этой библиотеке нет знаковых, так что это скорее концептуально
+    return t;
+}
+
+sing_value_type mod_exp(sing_value_type base, sing_value_type exp, sing_value_type mod) {
+    sing_value_type result = 1;
+    base %= mod;
+    while (exp > 0) {
+        if (exp & 1) result = (result * base) % mod;
+        base = (base * base) % mod;
+        exp >>= 1;
+    }
+    return result;
 }
 
 // Расширенный алгоритм Евклида: возвращает gcd(a,b) и находит x,y: a*x + b*y = gcd
-unsigned long long ext_gcd(unsigned long long a, unsigned long long b, unsigned long long& x, unsigned long long& y) {
-    if (b == 0) {
+sing_value_type ext_gcd(sing_value_type a, sing_value_type b, sing_value_type& x, sing_value_type& y) {
+    if (b == zero) {
         x = 1; y = 0;
         return a;
     }
-    unsigned long long x1, y1;
-    unsigned long long gcd = ext_gcd(b, a % b, x1, y1);
+    sing_value_type x1, y1;
+    sing_value_type gcd = ext_gcd(b, a % b, x1, y1);
     x = y1;
     y = x1 - (a / b) * y1;
     return gcd;
 }
 
-// Обратное по модулю: возвращает d такое, что (e * d) ≡ 1 (mod phi)
-unsigned long long mod_inv(unsigned long long e, unsigned long long phi) {
-    unsigned long long x, y;
-    unsigned long long g = ext_gcd(e, phi, x, y);
-    if (g != 1) return -1; // обратного нет
-    // Нормализуем x к [0, phi)
-    x %= phi;
-    if (x < 0) x += phi;
-    return x;
+const sing_value_type two(2);
+
+
+// n > 1, n нечётное
+bool miller_rabin_pass(const sing_value_type& n, const sing_value_type& a,
+    const sing_value_type& d, int s) {
+    // x = a^d mod n (используй свой mod_exp)
+    sing_value_type x = mod_exp(a, d, n);
+
+    if (x == 1 || x == n - 1) return true;
+
+    for (int r = 1; r < s; ++r) {
+        x = mod_mul(x, x, n); // x = x^2 mod n
+        if (x == n - 1) return true;
+        // Если x стало 1 раньше, чем мы увидели n-1 — это «разрыв баланса» (составное)
+        if (x == 1) return false;
+    }
+    return false; // не прошло
 }
 
-// «Простой» тест простоты (для маленьких чисел)
-bool is_prime(unsigned long long n) {
-    if (n < 2) return false;
-    if (n == 2) return true;
-    if (n % 2 == 0) return false;
-    for (unsigned long long i = 3; i <= n / i; i += 2) // Защита от переполнения i*i
-        if (n % i == 0) return false;
-    return true;
-}
+
 
 // === УЯЗВИМЫЙ ГПСЧ: слаб в первые 10 секунд ===
 class VulnerableRNG {
@@ -174,7 +215,7 @@ public:
     static bool is_weak_window; // true в первые 10 сек
     static void seed() {
     }
-    static unsigned long long  rand_int(unsigned long long  low, unsigned long long  high) {
+    static sing_value_type  rand_int(sing_value_type  low, sing_value_type  high) {
   
         if (rd == nullptr)
         {
@@ -182,7 +223,7 @@ public:
             gen = new std::mt19937((*rd)());
         }
         std::uniform_int_distribution<unsigned long long> dist(low, high);
-        return dist(*gen);
+        return sing_value_type(dist(*gen));
     }
 };
 std::random_device* VulnerableRNG::rd;
@@ -190,9 +231,40 @@ std::mt19937* VulnerableRNG::gen;
 
 bool VulnerableRNG::is_weak_window = true;
 
+
+bool is_prime(const sing_value_type& n, int k = 8) {
+    static const sing_value_type two = 2;
+    static const sing_value_type three = 3;
+    static const sing_value_type zero = 0;
+
+    if (n < two) return false;
+    if (n == two || n == three) return true;
+    if (n % two == zero) return false;
+
+    // Представим n-1 = d * 2^s, d нечётное
+    sing_value_type d = n - 1;
+    int s = 0;
+    while (d % two == zero) {
+        d = d / two;
+        ++s;
+    }
+
+    // Для маленьких n можно ещё добавить быстрый детерминированный фильтр
+    // (проверить на маленькие простые до 100–1000), чтобы отсечь мусор раньше
+
+    // k раундов со случайными a
+    for (int i = 0; i < k; ++i) {
+        // Тут нужен ГСЧ для bigint; у тебя уже есть свой ГСЧ на C++
+        sing_value_type a = VulnerableRNG::rand_int(two, n - two);
+        if (!miller_rabin_pass(n, a, d, s))
+            return false;
+    }
+    return true;
+}
+
 // Генерация простого числа с использованием уязвимого ГПСЧ
-unsigned long long  gen_prime_vuln(unsigned long long  low, unsigned long long  high) {
-    unsigned long long  p;
+sing_value_type  gen_prime_vuln(sing_value_type  low, sing_value_type  high) {
+    sing_value_type  p;
     do {
         p = VulnerableRNG::rand_int(low, high);
     } while (!is_prime(p));
@@ -200,8 +272,8 @@ unsigned long long  gen_prime_vuln(unsigned long long  low, unsigned long long  
 }
 
 // Упрощённый хеш для демонстрации
-unsigned long long simple_hash(const std::string& str, unsigned long long mod) {
-    unsigned long long h = 0;
+sing_value_type simple_hash(const std::string& str, sing_value_type mod) {
+    sing_value_type h = 0;
     for (char c : str) {
         h = (h * 31 + (unsigned char)c) % mod;
     }
@@ -211,40 +283,40 @@ unsigned long long simple_hash(const std::string& str, unsigned long long mod) {
 
 
 // Создаём самоподписанный сертификат УЦ
-SimpleCert generate_root_ca(unsigned long long ca_n, unsigned long long ca_e, unsigned long long ca_d) {
+SimpleCert generate_root_ca(sing_value_type ca_n, sing_value_type ca_e, sing_value_type ca_d) {
     SimpleCert ca_cert;
     ca_cert.fields["CN"] = "My Mini CA";
     ca_cert.fields["validity_start"] = "2024-01-01";
     ca_cert.fields["validity_end"] = "2034-01-01";
     ca_cert.fields["serial"] = "1"; // Серийный номер
-    ca_cert.fields["pubkey_n"] = std::to_string(ca_n);
-    ca_cert.fields["pubkey_e"] = std::to_string(ca_e);
+    ca_cert.fields["pubkey_n"] = to_string(ca_n);
+    ca_cert.fields["pubkey_e"] = to_string(ca_e);
 
     // «Подписываем» сертификат: хешируем поля и подписываем RSA
     std::string data_to_sign;
     for (const auto& field : ca_cert.fields) {
         data_to_sign += field.first + ":" + field.second + "|";
     }
-    unsigned long long hash_val = simple_hash(data_to_sign, ca_n); // Ваш хеш-метод
-    unsigned long long sig = mod_exp(hash_val, ca_d, ca_n); // Подпись: hash^d mod n
-    ca_cert.signature = std::to_string(sig);
+    sing_value_type hash_val = simple_hash(data_to_sign, ca_n); // Ваш хеш-метод
+    sing_value_type sig = mod_exp(hash_val, ca_d, ca_n); // Подпись: hash^d mod n
+    ca_cert.signature = to_string(sig);
 
     return ca_cert;
 }
 
 // Формирование CSR клиентом
 CSR create_csr(const std::map<std::string, std::string>& subject,
-    unsigned long long client_n, unsigned long long client_e) {
+    sing_value_type client_n, sing_value_type client_e) {
     CSR csr;
     csr.subject = subject;
-    csr.pubkey_n = std::to_string(client_n);
-    csr.pubkey_e = std::to_string(client_e);
+    csr.pubkey_n = to_string(client_n);
+    csr.pubkey_e = to_string(client_e);
     return csr;
 }
 
 // Подписание CSR УЦ
 SimpleCert sign_csr(const CSR& csr, const SimpleCert& ca_cert,
-    unsigned long long ca_d, unsigned long long ca_n) {
+    sing_value_type ca_d, sing_value_type ca_n) {
     SimpleCert client_cert;
 
     // Копируем данные из CSR
@@ -265,9 +337,9 @@ SimpleCert sign_csr(const CSR& csr, const SimpleCert& ca_cert,
     for (const auto& field : client_cert.fields) {
         data_to_sign += field.first + ":" + field.second + "|";
     }
-    unsigned long long hash_val = simple_hash(data_to_sign, ca_n);
-    unsigned long long sig = mod_exp(hash_val, ca_d, ca_n);
-    client_cert.signature = std::to_string(sig);
+    sing_value_type hash_val = simple_hash(data_to_sign, ca_n);
+    sing_value_type sig = mod_exp(hash_val, ca_d, ca_n);
+    client_cert.signature = to_string(sig);
 
     return client_cert;
 }
@@ -275,81 +347,81 @@ SimpleCert sign_csr(const CSR& csr, const SimpleCert& ca_cert,
 // Проверка сертификата
 bool verify_cert(const SimpleCert& cert, const SimpleCert& ca_cert) {
     // Берём открытый ключ УЦ из его сертификата
-    unsigned long long ca_pub_n = std::stoll(ca_cert.fields.at("pubkey_n"));
-    unsigned long long ca_pub_e = std::stoll(ca_cert.fields.at("pubkey_e"));
+    sing_value_type ca_pub_n = sing_value_type(ca_cert.fields.at("pubkey_n"), 10);
+    sing_value_type ca_pub_e = sing_value_type(ca_cert.fields.at("pubkey_e"), 10);
 
     // Восстанавливаем хеш из подписи сертификата
-    unsigned long long sig_val = std::stoll(cert.signature);
-    unsigned long long recovered_hash = mod_exp(sig_val, ca_pub_e, ca_pub_n);
+    sing_value_type sig_val = sing_value_type(cert.signature, 10);
+    sing_value_type recovered_hash = mod_exp(sig_val, ca_pub_e, ca_pub_n);
 
     // Считаем хеш от полей сертификата
     std::string data_to_hash;
     for (const auto& field : cert.fields) {
         data_to_hash += field.first + ":" + field.second + "|";
     }
-    unsigned long long actual_hash = simple_hash(data_to_hash, ca_pub_n);
+    sing_value_type actual_hash = simple_hash(data_to_hash, ca_pub_n);
 
     return recovered_hash == actual_hash;
 }
 
-uint64_t attempts = 0;
+int attempts = 0;
 // === АТАКУЮЩИЙ МОДУЛЬ: перебирает семена и восстанавливает ключи ===
 class Attacker {
 public:
-    bool safe_mul(uint64_t a, uint64_t b, uint64_t& result) {
-        if (a == 0 || b == 0) {
+    bool safe_mul(sing_value_type a, sing_value_type b, sing_value_type& result) {
+        if (a == zero || b == zero) {
             result = 0;
             return true;
         }
-        if (b > UINT64_MAX / a) {
-            return false; // Переполнение
-        }
         result = a * b;
-        return true;
+        return (result / a == b); // если при делении обратно не получили b — было переполнение
     }
+
     // Перебираем семена в предполагаемом временном окне (±30 сек от T)
-    bool crack_rsa_key(uint64_t n, uint64_t e, std::wostream& log, unsigned long long& _p,unsigned long long& _q) {
+    bool crack_rsa_key(sing_value_type n, sing_value_type e, std::wostream& log, sing_value_type& _p,sing_value_type& _q) {
         auto start = std::chrono::steady_clock::now();
         auto end = start + std::chrono::seconds(1); // Лимит времени — 3 секунды
-        attempts = 0;
-        uint64_t sqrt_n = static_cast<uint64_t>(std::sqrt(n)) + 1;
+        attempts = 1;
+        sing_value_type sqrt_n = static_cast<sing_value_type>(isqrt(n)) + 1;
 
-        log << L"Запуск атаки на RSA ключ (n=" << n << L", e=" << e << L")\n";
+        log << L"Запуск атаки на RSA ключ (n=" << string_to_wstring(to_string(n)) << L", e=" << string_to_wstring(to_string(e)) << L")\n";
         log << L"Ограничение по времени: 1 секунды\n";
-
+        sing_value_type mina(min_prime);
         while (std::chrono::steady_clock::now() < end) {
             // Генерируем p в диапазоне [2, sqrt(n)]
-            uint64_t p_candidate = gen_prime_trial(2, sqrt_n);
+            sing_value_type p_candidate = gen_prime_trial(mina, sqrt_n);
 
             _p = p_candidate;
             // Проверяем, делится ли n на p_candidate
-            if (n % p_candidate == 0) {
-                uint64_t q_candidate = n / p_candidate;
-
+            if (n % p_candidate == zero) {
+                sing_value_type q_candidate = n / p_candidate;
+                MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);
                 // Проверяем, что q тоже простое
                 if (is_prime(q_candidate)) {
-                    log << L"ВЗЛОМ УСПЕШЕН! Найдено p=" << p_candidate
-                        << L", q=" << q_candidate << L"\n";
+                    log << L"ВЗЛОМ УСПЕШЕН! Найдено p=" << string_to_wstring(to_string(p_candidate))
+                        << L", q=" << string_to_wstring(to_string(q_candidate))  << L"\n";
                     _q = q_candidate;
                     // Безопасное вычисление φ(n)
-                    uint64_t phi_p = p_candidate - 1;
-                    uint64_t phi_q = q_candidate - 1;
-                    uint64_t phi;
+                    sing_value_type phi_p = p_candidate - 1;
+                    sing_value_type phi_q = q_candidate - 1;
+                    sing_value_type phi;
                     if (!safe_mul(phi_p, phi_q, phi)) {
                         log << L"Ошибка: переполнение при вычислении φ(n)\n";
-                        _q = (unsigned long long) - 1;
+                        _q = (sing_value_type) - 1;
                         continue;
                     }
 
                     // Находим d = e⁻¹ mod φ(n)
-                    int64_t d_cracked = mod_inv(static_cast<int64_t>(e), static_cast<int64_t>(phi));
-                    if (d_cracked != -1) {
-                        log << L"Восстановлен закрытый ключ d=" << d_cracked << L"\n";
+                    sing_value_type d_cracked = mod_inv(static_cast<sing_value_type>(e), static_cast<sing_value_type>(phi));
+                    if (d_cracked != sing_value_type(-1)) {
+                        log << L"Восстановлен закрытый ключ d=" << string_to_wstring(to_string(d_cracked)) << L"\n";
                         return true;
                     }
                     else {
                         log << L"Ошибка: не удалось вычислить обратный элемент\n";
-                        _q = (unsigned long long) - 2;
+                        _q = (sing_value_type) - 2;
                         continue;
                     }
                 }
@@ -368,8 +440,8 @@ public:
 
 private:
     // Вспомогательная функция для генерации простых при переборе
-    unsigned long long gen_prime_trial(unsigned long long low, unsigned long long high) {
-        unsigned long long p;
+    sing_value_type gen_prime_trial(sing_value_type low, sing_value_type high) {
+        sing_value_type p;
         do {
             p = VulnerableRNG::rand_int(low, high); // Используем текущий rand()
         } while (!is_prime(p));
@@ -378,12 +450,12 @@ private:
 };
 
 
-unsigned long long ca_p = 0;
-unsigned long long  ca_q = 0;
+sing_value_type ca_p = 0;
+sing_value_type  ca_q = 0;
 
 
-unsigned long long  client_p = 0;
-unsigned long long  client_q = 0;
+sing_value_type  client_p = 0;
+sing_value_type  client_q = 0;
 
 
 
@@ -408,6 +480,7 @@ CSensorMonitorDlg::CSensorMonitorDlg(CWnd* pParent)
     m_diffs_step = 0;
     m_prev_value = 0.0;
     m_angle = 0.0;
+    m_angle_start = 0;
     m_controlSystem = new ControlSystem(this);
     m_lock = false;
 }
@@ -554,7 +627,7 @@ void CSensorMonitorDlg::ReadSerialData()
     DWORD bytesRead;
     CString dataBufferStr;
     SendCommandAndReadResponse(m_hSerial, dataBufferStr);
-    double value = std::stod(dataBufferStr.GetBuffer());
+    float value = std::stod(dataBufferStr.GetBuffer());
     CTime now = CTime::GetCurrentTime();
 
     if (m_lock == false)
@@ -562,8 +635,8 @@ void CSensorMonitorDlg::ReadSerialData()
         ca_p = gen_prime_vuln(min_prime, max_prime);
         ca_q = gen_prime_vuln(min_prime, max_prime);
          
-        SetDlgItemText(IDC_PROOT, std::to_wstring(ca_p).c_str());
-        SetDlgItemText(IDC_QROOT, std::to_wstring(ca_q).c_str());
+        SetDlgItemText(IDC_PROOT, string_to_wstring(to_string(ca_p)).c_str());
+        SetDlgItemText(IDC_QROOT, string_to_wstring(to_string(ca_q)).c_str());
 
         client_p = gen_prime_vuln(min_prime, max_prime);
         client_q = gen_prime_vuln(min_prime, max_prime);
@@ -791,7 +864,7 @@ void CSensorMonitorDlg::UpdateMetrics()
         } 
 
     }
-    
+    m_angle_start = stable;
     m_prev_value = m_dataBuffer[m_dataBuffer.size() - 1].value;
     m_ctrlCondition.SetWindowText(conditionStr);
     // Для изменения цвета текста потребуется дополнительный обработчик WM_CTLCOLOR
@@ -808,7 +881,7 @@ void CSensorMonitorDlg::UpdateMetrics()
 
 #include <sstream>
 
-
+const sing_value_type one(1);
 
 int is = 0;
 void CSensorMonitorDlg::check_func()
@@ -817,6 +890,8 @@ void CSensorMonitorDlg::check_func()
     std::wostream log_stream(&log_buffer);
     time_t start_time = time(0);
     log_stream << _T("=== СИМУЛЯЦИЯ АТАКИ НА СЛАБЫЙ ГПСЧ ===\n");
+    log_stream << _T("M_ANGLE=") << m_angle << _T("\n");
+    log_stream << _T("RELATE M_START_ANGLE=") << m_angle_start << _T("\n");
     log_stream << _T("Запуск системы в момент ") << start_time << _T(" (это наша точка отсчёта)\n\n");
     bool add_to_log = false;
       // Включаем уязвимое окно на 5 сек — именно в этот момент будут генерироваться ключи
@@ -826,19 +901,19 @@ void CSensorMonitorDlg::check_func()
     //    log_stream << "--- ГЕНЕРАЦИЯ КЛЮЧЕЙ УЦ В УЯЗВИМЫЙ ПЕРИОД ---\n";
         // Генерируем ключи УЦ в уязвимый период
 
-    unsigned long long ca_n = ca_p * ca_q;
-    unsigned long long ca_phi = (unsigned long long)(ca_p - 1) * (ca_q - 1);
-    unsigned long long ca_e = 65537;
-    while (ext_gcd(ca_e, ca_phi, *(new unsigned long long), *(new unsigned long long)) != 1) ca_e += 2;
-    unsigned long long ca_d = mod_inv(ca_e, ca_phi);
+    sing_value_type ca_n = ca_p * ca_q;
+    sing_value_type ca_phi = (sing_value_type)(ca_p - 1) * (ca_q - 1);
+    sing_value_type ca_e = 65537;
+    while (ext_gcd(ca_e, ca_phi, *(new sing_value_type), *(new sing_value_type)) != one) ca_e += 2;
+    sing_value_type ca_d = mod_inv(ca_e, ca_phi);
 
     SimpleCert ca_cert = generate_root_ca(ca_n, ca_e, ca_d);
-    log_stream << _T("УЦ создан в уязвимый период. n=") << ca_n
-    << _T(", p=") << ca_p << _T(", q=") << ca_q << _T("\n");
-    unsigned long long client_n = (unsigned long long)(client_p * client_q);
-    unsigned long long client_phi = (unsigned long long)(client_p - 1) * (client_q - 1);
-    unsigned long long client_e = 65537;
-    unsigned long long client_d = 0;
+    log_stream << _T("УЦ создан в уязвимый период. n=") << string_to_wstring(to_string(ca_n))
+    << _T(", p=") << string_to_wstring(to_string(ca_p)) << _T(", q=") << string_to_wstring(to_string(ca_q)) << _T("\n");
+    sing_value_type client_n = (sing_value_type)(client_p * client_q);
+    sing_value_type client_phi = (sing_value_type)(client_p - 1) * (client_q - 1);
+    sing_value_type client_e = 65537;
+    sing_value_type client_d = 0;
     
  
     // Клиент генерирует ключи уже в «безопасном» режиме
@@ -847,7 +922,7 @@ void CSensorMonitorDlg::check_func()
 
 
     if (client_e >= client_phi) client_e = 3;
-    while (ext_gcd(client_e, client_phi, *(new unsigned long long), *(new unsigned long long)) != 1) client_e += 2;
+    while (ext_gcd(client_e, client_phi, *(new sing_value_type), *(new sing_value_type)) != one) client_e += 2;
     client_d = mod_inv(client_e, client_phi);
 
     // Создаём CSR от клиента
@@ -875,13 +950,13 @@ void CSensorMonitorDlg::check_func()
     // === АТАКА НА КЛЮЧ УЦ ===
     log_stream << _T("\n=== ЗАПУСК АТАКИ ") << is++ << _T(" НА КЛЮЧ УЦ ===\n");
     Attacker attacker;
-    unsigned long long p = 0;
-    unsigned long long q = 0;
+    sing_value_type p = 0;
+    sing_value_type q = 0;
 
     bool attack_success = attacker.crack_rsa_key(ca_n, ca_e, log_stream, p, q );
 
-    SetDlgItemText(IDC_PPRED, std::to_wstring(p).c_str());
-    SetDlgItemText(IDC_QPRED, std::to_wstring(q).c_str());
+    SetDlgItemText(IDC_PPRED, string_to_wstring(to_string(p)).c_str());
+    SetDlgItemText(IDC_QPRED, string_to_wstring(to_string(q)).c_str());
     if (attack_success) {
         log_stream << _T("\n=== АТАКА УСПЕШНА: злоумышленник восстановил закрытый ключ УЦ! ===\n");
         log_stream << _T("Теперь он может подписывать любые сертификаты от имени УЦ.\n");
@@ -891,8 +966,8 @@ void CSensorMonitorDlg::check_func()
         log_stream << _T("\n=== АТАКА НЕ УДАЛАСЬ: ключ УЦ защищён. ===\n");
         return;
     }
-    unsigned long long evil_n = 0;
-    unsigned long long evil_e = 0;
+    sing_value_type evil_n = 0;
+    sing_value_type evil_e = 0;
     // Демонстрация: что может сделать злоумышленник, если взломал ключ УЦ
     if (attack_success) {
 
@@ -903,9 +978,9 @@ void CSensorMonitorDlg::check_func()
         evil_subject["O"] = "Evil Corp";
 
         // Генерирует свои ключи (но это не обязательно — он может использовать любые)
-        unsigned long long evil_p = gen_prime_vuln(min_prime, max_prime);
-        unsigned long long  evil_q = gen_prime_vuln(min_prime, max_prime);
-        evil_n = (unsigned long long)(evil_p * evil_q);
+        sing_value_type evil_p = gen_prime_vuln(min_prime, max_prime);
+        sing_value_type  evil_q = gen_prime_vuln(min_prime, max_prime);
+        evil_n = (sing_value_type)(evil_p * evil_q);
         evil_e = 65537;
 
         CSR evil_csr = create_csr(evil_subject, evil_n, evil_e);
@@ -924,24 +999,24 @@ void CSensorMonitorDlg::check_func()
     }
     // Клиент подписывает сообщение своим закрытым ключом
     std::string message = "Hello, CA! This is a secure message.";
-    unsigned long long msg_hash = simple_hash(message, client_n);
-    unsigned long long client_signature = mod_exp(msg_hash, client_d, client_n);
+    sing_value_type msg_hash = simple_hash(message, client_n);
+    sing_value_type client_signature = mod_exp(msg_hash, client_d, client_n);
 
     log_stream << _T("\n--- ПРОВЕРКА ПОДПИСИ СООБЩЕНИЯ КЛИЕНТА ---\n");
     log_stream << _T("Сообщение: ") << string_to_wstring(message) << _T("\n");
-    log_stream << _T("Подпись клиента: ") << client_signature << _T("\n");
+    log_stream << _T("Подпись клиента: ") << string_to_wstring(to_string(client_signature)) << _T("\n");
 
     // Берём открытый ключ клиента из его сертификата
-    unsigned long long cert_client_n = std::stoll(client_cert.fields.at("pubkey_n"));
-    unsigned long long cert_client_e = std::stoll(client_cert.fields.at("pubkey_e"));
+    sing_value_type cert_client_n = sing_value_type(client_cert.fields.at("pubkey_n"), 10);
+    sing_value_type cert_client_e = sing_value_type(client_cert.fields.at("pubkey_e"),10);
 
     // Восстанавливаем хеш из подписи
-    unsigned long long recovered_hash = mod_exp(client_signature, cert_client_e, cert_client_n);
+    sing_value_type recovered_hash = mod_exp(client_signature, cert_client_e, cert_client_n);
     // Считаем хеш от оригинального сообщения
-    unsigned long long actual_hash = simple_hash(message, cert_client_n);
+    sing_value_type actual_hash = simple_hash(message, cert_client_n);
 
-    log_stream << _T("Восстановленный хеш: ") << recovered_hash << _T("\n");
-    log_stream << _T("Реальный хеш: ") << actual_hash << _T("\n");
+    log_stream << _T("Восстановленный хеш: ") <<  string_to_wstring(to_string(recovered_hash)) << _T("\n");
+    log_stream << _T("Реальный хеш: ") <<  string_to_wstring(to_string(actual_hash)) << _T("\n");
 
     if (recovered_hash == actual_hash) {
         log_stream << _T("Проверка подписи сообщения: ПРОЙДЕНА! Сообщение не изменено и от доверенного клиента.\n");
@@ -957,16 +1032,16 @@ void CSensorMonitorDlg::check_func()
         // Он использует свой ключ (или взломанный ключ УЦ) для создания фальшивой подписи
 
         std::string evil_message = "Transfer all funds to account 12345";
-        unsigned long long evil_hash = simple_hash(evil_message, evil_n);
+        sing_value_type evil_hash = simple_hash(evil_message, evil_n);
         // Подписываем фальшивое сообщение, выдавая его за клиента
-        unsigned long long evil_signature = mod_exp(evil_hash, evil_e, evil_n); // Здесь на самом деле нужно использовать d, но для демонстрации
+        sing_value_type evil_signature = mod_exp(evil_hash, evil_e, evil_n); // Здесь на самом деле нужно использовать d, но для демонстрации
 
         log_stream << _T("Злоумышленник создал фальшивую подпись для сообщения: ") << string_to_wstring(evil_message) << _T("\n");
-        log_stream << _T("Фальшивая подпись: ") << evil_signature << _T("\n");
+        log_stream << _T("Фальшивая подпись: ") << string_to_wstring(to_string(evil_signature)) << _T("\n");
 
         // Попытка проверки фальшивой подписи (она не пройдёт, потому что используется другой ключ)
-        unsigned long long recovered_evil_hash = mod_exp(evil_signature, cert_client_e, cert_client_n);
-        unsigned long long actual_evil_hash = simple_hash(evil_message, cert_client_n);
+        sing_value_type recovered_evil_hash = mod_exp(evil_signature, cert_client_e, cert_client_n);
+        sing_value_type actual_evil_hash = simple_hash(evil_message, cert_client_n);
 
         if (recovered_evil_hash == actual_evil_hash) {
            
@@ -989,9 +1064,9 @@ void CSensorMonitorDlg::check_func()
             SimpleCert tricky_cert = sign_csr(tricky_csr, ca_cert, ca_d, ca_n);
 
             // Теперь подпись, созданная с e=3, может быть проверена с использованием сертификата
-            unsigned long long tricky_signature = mod_exp(evil_hash, 3, cert_client_n); // Подпись с маленьким e
+            sing_value_type tricky_signature = mod_exp(evil_hash, 3, cert_client_n); // Подпись с маленьким e
 
-            unsigned long long recovered_tricky_hash = mod_exp(tricky_signature, 3, cert_client_n);
+            sing_value_type recovered_tricky_hash = mod_exp(tricky_signature, 3, cert_client_n);
             if (recovered_tricky_hash == actual_evil_hash) {
                 log_stream << _T("Изощрённая подделка подписи прошла проверку! Критическая уязвимость.\n");
 
@@ -1007,6 +1082,12 @@ void CSensorMonitorDlg::check_func()
     if (add_to_log)
     {
         m_ctrlList.SetItemData(m_ctrlList.AddString(_T("Взлом +")), (DWORD_PTR)(new CString(log_buffer.str().c_str())));
+        MessageBeep(MB_ABORTRETRYIGNORE);
+        MessageBeep(MB_ABORTRETRYIGNORE);
+        MessageBeep(MB_ABORTRETRYIGNORE);
+        MessageBeep(MB_ABORTRETRYIGNORE);
+        MessageBeep(MB_ABORTRETRYIGNORE);
+        MessageBeep(MB_ABORTRETRYIGNORE);
         UpdateData(0);
     }
 }

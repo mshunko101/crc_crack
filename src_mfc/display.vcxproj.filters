@@ -39,6 +39,15 @@
     <ClInclude Include="randpp.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="..\uint128_t\uint128_t.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="..\integer\integer.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="..\uint256_t\uint256_t.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="SensorMonitor.cpp">
@@ -51,6 +60,15 @@
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="CManipulator.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="..\uint128_t\uint128_t.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="..\integer\integer.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="..\uint256_t\uint256_t.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>

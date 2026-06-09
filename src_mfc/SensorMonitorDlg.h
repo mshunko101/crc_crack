@@ -11,7 +11,7 @@ struct Vector3 {
     double x1, x2, x3;
 
     // Конструктор
-    Vector3(double y) : x1(2.0 * y / 3.0), x2(y / 3.0), x3(y* y) {}
+    Vector3(float y) : x1(2.0 * y / 3.0), x2(y / 3.0), x3(y* y) {}
 
     // Длина вектора
     double length() const {
@@ -23,11 +23,17 @@ struct Vector3 {
         return x1 * other.x1 + x2 * other.x2 + x3 * other.x3;
     }
 
-    // Разность векторов
-    Vector3 operator-(const Vector3& other) const {
-        return Vector3(0, x1 - other.x1, x2 - other.x2, x3 - other.x3);
-    }
 
+    Vector3(double x1 = 0, double x2 = 0, double x3 = 0) : x1(x1), x2(x2), x3(x3) {}
+    Vector3 operator+(const Vector3& o) const { return { x1 + o.x1, x2 + o.x2, x3 + o.x3 }; }
+    Vector3 operator-(const Vector3& o) const { return { x1 - o.x1, x2 - o.x2, x3 - o.x3 }; }
+    Vector3 operator*(double s) const { return { x1 * s, x2 * s, x3 * s }; }
+    double norm2() const { return x1 * x1 + x2 * x2 + x3 * x3; }
+    double norm() const { return std::sqrt(norm2()); }
+    Vector3 normalize() const {
+        double n = norm();
+        return (n > 1e-12) ? (*this) * (1.0 / n) : Vector3{};
+    }
 private:
     // Частный конструктор для разности векторов
     Vector3(int dummy, double dx1, double dx2, double dx3) : x1(dx1), x2(dx2), x3(dx3) {}
@@ -38,9 +44,8 @@ private:
 // Структура для хранения данных с временной меткой
 struct SensorData {
     CTime timestamp;
-    double value;
-};
-struct Vector3;
+    float value;
+}; 
 class CSensorMonitorDlg : public CDialogEx, public Sensor
 {
 public:
@@ -73,10 +78,10 @@ private:
     // COM-порт
     HANDLE m_hSerial;
     bool m_bRunning;
-    double m_balance_step;
-    double m_diffs_step;
-    double m_prev_value;
-    double m_prev_value_sq;
+    float m_balance_step;
+    float m_diffs_step;
+    float m_prev_value;
+    float m_prev_value_sq;
     std::thread m_thread;
     bool m_lock;
     // Буфер данных за последние 3 минуты
@@ -92,7 +97,8 @@ private:
     CStatic m_ctrlMaxValue;
     CStatic m_ctrlCondition;
     CStatic m_ctrlTimestamp;
-    volatile double m_angle;
+    volatile float m_angle;
+    volatile float m_angle_start;
     ControlSystem* m_controlSystem;
     CListBox m_ctrlList;
     // Таймер для обновления интерфейса

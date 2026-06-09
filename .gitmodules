@@ -1,0 +1,12 @@
+[submodule "uint256_t"]
+	path = uint256_t
+	url = https://github.com/calccrypto/uint256_t.git
+	branch = master
+[submodule "uint128_t"]
+	path = uint128_t
+	url = https://github.com/calccrypto/uint128_t.git
+	branch = master
+[submodule "integer"]
+	path = integer
+	url = https://github.com/calccrypto/integer.git
+	branch = master

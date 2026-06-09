@@ -88,7 +88,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -159,7 +159,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -184,6 +184,9 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\integer\integer.h" />
+    <ClInclude Include="..\uint128_t\uint128_t.h" />
+    <ClInclude Include="..\uint256_t\uint256_t.h" />
     <ClInclude Include="CManipulator.h" />
     <ClInclude Include="randpp.h" />
     <ClInclude Include="SensorMonitor.h" />
@@ -194,6 +197,9 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\integer\integer.cpp" />
+    <ClCompile Include="..\uint128_t\uint128_t.cpp" />
+    <ClCompile Include="..\uint256_t\uint256_t.cpp" />
     <ClCompile Include="CManipulator.cpp" />
     <ClCompile Include="SensorMonitor.cpp" />
     <ClCompile Include="SensorMonitorDlg.cpp" />
