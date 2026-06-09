@@ -12,8 +12,12 @@
 
 typedef uint256_t sing_value_type;
 
-#define min_prime std::numeric_limits<long long>::max()
-#define max_prime std::numeric_limits<unsigned long long>::max()
+const sing_value_type step_prime = (unsigned long long)sqrt(std::numeric_limits<unsigned long long>::max());
+
+const sing_value_type min_prime_start = 2;
+
+sing_value_type min_prime = 2;
+sing_value_type max_prime = std::numeric_limits<unsigned long long>::max();
 
 
 std::string to_string(sing_value_type vt)
@@ -483,6 +487,8 @@ CSensorMonitorDlg::CSensorMonitorDlg(CWnd* pParent)
     m_angle_start = 0;
     m_controlSystem = new ControlSystem(this);
     m_lock = false;
+    m_rand_prime_error = 0;
+    m_rand_circles = 0;
 }
 
 void CSensorMonitorDlg::DoDataExchange(CDataExchange* pDX)
@@ -646,6 +652,8 @@ void CSensorMonitorDlg::ReadSerialData()
 
     m_dataBuffer.push_back({ now, value });
     dataBufferStr.ReleaseBuffer();
+
+
 }
 
 BOOL CSensorMonitorDlg::SendCommandAndReadResponse(HANDLE hCom, CString& outResponse)
@@ -944,9 +952,12 @@ void CSensorMonitorDlg::check_func()
     }
     else {
         log_stream << _T("Проверка сертификата: НЕ ПРОЙДЕНА!\n");
+        m_rand_prime_error++;
+        SetDlgItemText(IDC_RAND_PRIME_ERROR, string_to_wstring(to_string(m_rand_prime_error)).c_str());
+         
         return;
     }
-     
+
     // === АТАКА НА КЛЮЧ УЦ ===
     log_stream << _T("\n=== ЗАПУСК АТАКИ ") << is++ << _T(" НА КЛЮЧ УЦ ===\n");
     Attacker attacker;
@@ -958,12 +969,27 @@ void CSensorMonitorDlg::check_func()
     SetDlgItemText(IDC_PPRED, string_to_wstring(to_string(p)).c_str());
     SetDlgItemText(IDC_QPRED, string_to_wstring(to_string(q)).c_str());
     if (attack_success) {
+
+        log_stream << _T("min_prime:") << string_to_wstring(to_string(min_prime)).c_str() << "\n";
+        log_stream << _T("max_prime:") << string_to_wstring(to_string(max_prime)).c_str() << "\n";
         log_stream << _T("\n=== АТАКА УСПЕШНА: злоумышленник восстановил закрытый ключ УЦ! ===\n");
         log_stream << _T("Теперь он может подписывать любые сертификаты от имени УЦ.\n");
         add_to_log = true;
     }
     else {
         log_stream << _T("\n=== АТАКА НЕ УДАЛАСЬ: ключ УЦ защищён. ===\n");
+        min_prime = min_prime + step_prime;
+        if (min_prime > max_prime)
+        {
+            min_prime = min_prime_start;
+            m_rand_circles++;
+        }
+
+        SetDlgItemText(IDC_RAND_PRIME_START, string_to_wstring(to_string(min_prime)).c_str());
+        SetDlgItemText(IDC_RAND_PRIME_END, string_to_wstring(to_string(max_prime)).c_str());
+        SetDlgItemText(IDC_RAND_CIRCLES, string_to_wstring(to_string(m_rand_circles)).c_str());
+        SetDlgItemText(IDC_RAND_PRIME_STEP, string_to_wstring(to_string(step_prime)).c_str());
+
         return;
     }
     sing_value_type evil_n = 0;

@@ -99,6 +99,8 @@ private:
     CStatic m_ctrlTimestamp;
     volatile float m_angle;
     volatile float m_angle_start;
+    volatile int m_rand_circles;
+    volatile int m_rand_prime_error;
     ControlSystem* m_controlSystem;
     CListBox m_ctrlList;
     // Таймер для обновления интерфейса

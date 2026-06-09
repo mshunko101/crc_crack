@@ -31,6 +31,12 @@
 #define IDC_QROOT                       1020
 #define IDC_PPRED                       1021
 #define IDC_QPRED                       1022
+#define IDC_RAND_PRIME_START            1023
+#define IDC_RAND_PRIME_END              1024
+#define IDC_RAND_CIRCLES                1025
+#define IDC_RAND_PRIME_STEP             1026
+#define IDC_RAND_PRIME_START2           1028
+#define IDC_RAND_PRIME_ERROR            1028
 
 // Next default values for new objects
 // 
