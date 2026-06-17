@@ -15,6 +15,7 @@ typedef uint256_t sing_value_type;
 const sing_value_type step_prime = (unsigned long long)sqrt(std::numeric_limits<unsigned long long>::max());
 
 const sing_value_type min_prime_start = 2;
+sing_value_type max_prime_end;
 
 sing_value_type min_prime = 2;
 sing_value_type max_prime = std::numeric_limits<unsigned long long>::max();
@@ -640,7 +641,7 @@ void CSensorMonitorDlg::ReadSerialData()
     {
         ca_p = gen_prime_vuln(min_prime, max_prime);
         ca_q = gen_prime_vuln(min_prime, max_prime);
-         
+        max_prime_end = isqrt(ca_p * ca_q);
         SetDlgItemText(IDC_PROOT, string_to_wstring(to_string(ca_p)).c_str());
         SetDlgItemText(IDC_QROOT, string_to_wstring(to_string(ca_q)).c_str());
 
@@ -648,6 +649,7 @@ void CSensorMonitorDlg::ReadSerialData()
         client_q = gen_prime_vuln(min_prime, max_prime);
         m_start_point = new Vector3(value);
         m_lock = true;
+        max_prime = max_prime_end;
     }
 
     m_dataBuffer.push_back({ now, value });
@@ -978,12 +980,19 @@ void CSensorMonitorDlg::check_func()
     }
     else {
         log_stream << _T("\n=== АТАКА НЕ УДАЛАСЬ: ключ УЦ защищён. ===\n");
-        min_prime = min_prime + step_prime;
-        if (min_prime > max_prime)
+      /*  min_prime = min_prime + step_prime;
+         if (min_prime > max_prime)
         {
             min_prime = min_prime_start;
             m_rand_circles++;
         }
+
+        max_prime = max_prime - step_prime;
+        if (max_prime < min_prime)
+        {
+            max_prime = max_prime_end;
+            m_rand_circles++;
+        }*/
 
         SetDlgItemText(IDC_RAND_PRIME_START, string_to_wstring(to_string(min_prime)).c_str());
         SetDlgItemText(IDC_RAND_PRIME_END, string_to_wstring(to_string(max_prime)).c_str());
