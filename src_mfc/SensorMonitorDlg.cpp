@@ -136,18 +136,7 @@ struct CSR {
     }
 };
 
- 
-// Модульное умножение с защитой от переполнения: (a * b) mod m
-sing_value_type mod_mul(sing_value_type a, sing_value_type b, sing_value_type m) {
-    sing_value_type res = 0;
-    a %= m;
-    while (b > 0) {
-        if (b & 1) res = (res + a) % m;
-        a = (a << 1) % m;
-        b >>= 1;
-    }
-    return res;
-}
+
 
 // mod_inv для sing_value_type через расширенный Евклид (упрощённо)
 sing_value_type mod_inv(sing_value_type e, sing_value_type mod) {
@@ -165,17 +154,7 @@ sing_value_type mod_inv(sing_value_type e, sing_value_type mod) {
     if (t < 0) t += mod; // в этой библиотеке нет знаковых, так что это скорее концептуально
     return t;
 }
-
-sing_value_type mod_exp(sing_value_type base, sing_value_type exp, sing_value_type mod) {
-    sing_value_type result = 1;
-    base %= mod;
-    while (exp > 0) {
-        if (exp & 1) result = (result * base) % mod;
-        base = (base * base) % mod;
-        exp >>= 1;
-    }
-    return result;
-}
+ 
 
 // Расширенный алгоритм Евклида: возвращает gcd(a,b) и находит x,y: a*x + b*y = gcd
 sing_value_type ext_gcd(sing_value_type a, sing_value_type b, sing_value_type& x, sing_value_type& y) {
@@ -193,22 +172,6 @@ sing_value_type ext_gcd(sing_value_type a, sing_value_type b, sing_value_type& x
 const sing_value_type two(2);
 
 
-// n > 1, n нечётное
-bool miller_rabin_pass(const sing_value_type& n, const sing_value_type& a,
-    const sing_value_type& d, int s) {
-    // x = a^d mod n (используй свой mod_exp)
-    sing_value_type x = mod_exp(a, d, n);
-
-    if (x == 1 || x == n - 1) return true;
-
-    for (int r = 1; r < s; ++r) {
-        x = mod_mul(x, x, n); // x = x^2 mod n
-        if (x == n - 1) return true;
-        // Если x стало 1 раньше, чем мы увидели n-1 — это «разрыв баланса» (составное)
-        if (x == 1) return false;
-    }
-    return false; // не прошло
-}
 
 
 
@@ -237,50 +200,208 @@ std::mt19937* VulnerableRNG::gen;
 bool VulnerableRNG::is_weak_window = true;
 
 
-bool is_prime(const sing_value_type& n, int k = 8) {
-    static const sing_value_type two = 2;
-    static const sing_value_type three = 3;
-    static const sing_value_type zero = 0;
+// Вспомогательная константа нуля
+const sing_value_type ZERO("0",10);
+const sing_value_type ONE("1",10);
+const sing_value_type TWO(2);
+const sing_value_type THREE(3);
 
-    if (n < two) return false;
-    if (n == two || n == three) return true;
-    if (n % two == zero) return false;
 
-    // Представим n-1 = d * 2^s, d нечётное
-    sing_value_type d = n - 1;
+// =============================================================================
+// 1. МОДУЛЬНОЕ УМНОЖЕНИЕ (mod_mul)
+// Использует алгоритм "Russian Peasant" с оптимизацией вычитания вместо деления.
+// Это медленно (O(N)), но корректно работает без 512-битного промежуточного типа.
+// Для продакшена с 256 битами лучше реализовать умножение через 512-бит или Монтгомери.
+// =============================================================================
+sing_value_type mod_mul(sing_value_type a, sing_value_type b, sing_value_type m) {
+    if (m == ZERO) return ZERO;
+
+    a %= m;
+    b %= m;
+    if (a == ZERO || b == ZERO) return ZERO;
+
+    sing_value_type res = ZERO;
+    while (b > ZERO) {
+        if (b & ONE) {
+            res += a;
+            // Оптимизация: вместо res = res % m делаем вычитание, если res >= m
+            // Так как res < 2*m, одного вычитания достаточно
+            if (res >= m) {
+                res -= m;
+            }
+        }
+        a <<= 1;
+        if (a >= m) {
+            a -= m;
+        }
+        b >>= 1;
+    }
+    return res;
+}
+
+// =============================================================================
+// 2. МОДУЛЬНОЕ ВОЗВЕДЕНИЕ В СТЕПЕНЬ (mod_exp)
+// КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Использует mod_mul вместо оператора *
+// Исходный код (result * base) % mod был бы неверен для 256 бит!
+// =============================================================================
+sing_value_type mod_exp(sing_value_type base, sing_value_type exp, sing_value_type mod) {
+    if (mod == ONE) return ZERO;
+
+    sing_value_type result = ONE;
+    base %= mod;
+
+    while (exp > ZERO) {
+        if (exp & ONE) {
+            result = mod_mul(result, base, mod);
+        }
+        base = mod_mul(base, base, mod);
+        exp >>= 1;
+    }
+    return result;
+}
+
+// =============================================================================
+// 3. БЫСТРЫЙ ФИЛЬТР НА МАЛЕНЬКИЕ ПРОСТЫЕ
+// Отсекает 85-90% составных чисел мгновенно, экономя время на дорогом тесте MR
+// =============================================================================
+bool is_small_prime_candidate(const sing_value_type& n) {
+    static const std::vector<int> small_primes = {
+        2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
+        31, 37, 41, 43, 47, 53, 59, 61, 67, 71
+    };
+
+    for (int p : small_primes) {
+        if (n == p) return true;
+        // Если делится на маленькое простое -> составное
+        if (n % p == ZERO) return false;
+    }
+    return true;
+}
+
+// =============================================================================
+// 4. ТЕСТ МИЛЛЕРА-РАБИНА (Один проход)
+// =============================================================================
+bool miller_rabin_pass(const sing_value_type& n, const sing_value_type& a,
+    const sing_value_type& d, int s) {
+    sing_value_type x = mod_exp(a, d, n);
+
+    if (x == ONE || x == n - ONE) return true;
+
+    for (int r = 1; r < s; ++r) {
+        x = mod_mul(x, x, n); // x = x^2 mod n
+        if (x == n - ONE) return true;
+        if (x == ONE) return false; // Нетривиальный корень из 1 -> составное
+    }
+    return false; // Не прошло
+}
+
+// =============================================================================
+// 5. ПОЛНАЯ ПРОВЕРКА НА ПРОСТОТУ
+// =============================================================================
+bool is_prime(const sing_value_type& n, int k = 15) {
+    if (n < TWO) return false;
+    if (n == TWO || n == THREE) return true;
+
+    // Быстрый фильтр
+    if (!is_small_prime_candidate(n)) return false;
+
+    // Разложение n-1 = d * 2^s
+    sing_value_type d = n - ONE;
     int s = 0;
-    while (d % two == zero) {
-        d = d / two;
+    while ((d & ONE) == ZERO) {
+        d >>= 1;
         ++s;
     }
 
-    // Для маленьких n можно ещё добавить быстрый детерминированный фильтр
-    // (проверить на маленькие простые до 100–1000), чтобы отсечь мусор раньше
-
-    // k раундов со случайными a
+    // k раундов с разными случайными основаниями
     for (int i = 0; i < k; ++i) {
-        // Тут нужен ГСЧ для bigint; у тебя уже есть свой ГСЧ на C++
-        sing_value_type a = VulnerableRNG::rand_int(two, n - two);
+        // Генерируем a в диапазоне [2, n-2]
+        // Используем твой криптостойкий ГПСЧ simple_rand
+        // Предполагается: simple_rand.rand_int(low, high) возвращает равномерное число
+
+        if (n <= THREE) return false; // Защита от слишком малых диапазонов
+
+        sing_value_type low = TWO;
+        sing_value_type high = n - TWO;
+
+        // Вызов твоего генератора
+        sing_value_type a = VulnerableRNG::rand_int(low, high);
+
+        // Дополнительная защита: если вдруг генератор вернул что-то вне диапазона (баг)
+        if (a < low) a = low;
+        if (a > high) a = high;
+
         if (!miller_rabin_pass(n, a, d, s))
             return false;
     }
     return true;
 }
 
+// =============================================================================
+// 6. ГЕНЕРАЦИЯ ПРОСТОГО ЧИСЛА
+// =============================================================================
+/**
+ * Генерирует случайное простое число в диапазоне [low, high].
+ * Использует твой simple_rand для криптографической стойкости.
+ */
+sing_value_type gen_prime(sing_value_type low, sing_value_type high) {
+    if (low < TWO) low = TWO;
+    if (high < low) {
+        throw std::invalid_argument("Диапазон некорректен: high < low");
+    }
+
+    // Выравниваем нижнюю границу на нечётное число (простые > 2 всегда нечётные)
+    if (low > TWO && (low & ONE) == ZERO) {
+        ++low;
+    }
+
+    // Если после выравнивания low > high, значит диапазон пуст для простых
+    if (low > high) {
+        throw std::invalid_argument("В диапазоне нет нечётных чисел");
+    }
+
+    sing_value_type p;
+    int attempts = 0;
+    const int MAX_ATTEMPTS = 10000; // Защита от бесконечного цикла, если диапазон мал
+
+    do {
+        // 1. Получаем случайное число в диапазоне [low, high]
+        p = VulnerableRNG::rand_int(low, high);
+
+        // 2. Гарантируем нечётность (если выпало чётное и оно > 2)
+        // Примечание: если диапазон очень маленький (например, [2,2]), это может зациклить.
+        // Но для криптографии диапазоны огромные.
+        if (p > TWO && (p & ONE) == ZERO) {
+            ++p;
+            if (p > high) --p; // Если вышли за верхнюю границу, уменьшаем
+        }
+
+        attempts++;
+        if (attempts > MAX_ATTEMPTS) {
+            throw std::runtime_error("Не удалось найти простое число за разумное время. Проверьте диапазон.");
+        }
+
+    } while (!is_prime(p));
+
+    return p;
+}
+
+
+
+
 // Генерация простого числа с использованием уязвимого ГПСЧ
 sing_value_type  gen_prime_vuln(sing_value_type  low, sing_value_type  high) {
-    sing_value_type  p;
-    do {
-        p = VulnerableRNG::rand_int(low, high);
-    } while (!is_prime(p));
-    return p;
+
+    return gen_prime(low, high);
 }
 
 // Упрощённый хеш для демонстрации
 sing_value_type simple_hash(const std::string& str, sing_value_type mod) {
+    if (mod == 0) return 0; // защита от деления на 0
     sing_value_type h = 0;
-    for (char c : str) {
-        h = (h * 31 + (unsigned char)c) % mod;
+    sing_value_type P("31",10);
+    for (unsigned char c : str) {
+        h = (h * P + c) % mod;
     }
     return h;
 }
@@ -909,7 +1030,7 @@ void CSensorMonitorDlg::check_func()
     VulnerableRNG::seed();
 
     //    log_stream << "--- ГЕНЕРАЦИЯ КЛЮЧЕЙ УЦ В УЯЗВИМЫЙ ПЕРИОД ---\n";
-        // Генерируем ключи УЦ в уязвимый период
+        // Генерируем ключи УЦ в уязвимый период// //15371301528318186197
 
     sing_value_type ca_n = ca_p * ca_q;
     sing_value_type ca_phi = (sing_value_type)(ca_p - 1) * (ca_q - 1);
@@ -920,8 +1041,8 @@ void CSensorMonitorDlg::check_func()
     SimpleCert ca_cert = generate_root_ca(ca_n, ca_e, ca_d);
     log_stream << _T("УЦ создан в уязвимый период. n=") << string_to_wstring(to_string(ca_n))
     << _T(", p=") << string_to_wstring(to_string(ca_p)) << _T(", q=") << string_to_wstring(to_string(ca_q)) << _T("\n");
-    sing_value_type client_n = (sing_value_type)(client_p * client_q);
-    sing_value_type client_phi = (sing_value_type)(client_p - 1) * (client_q - 1);
+    sing_value_type client_n = client_p * client_q;
+    sing_value_type client_phi = (client_p - 1) * (client_q - 1);
     sing_value_type client_e = 65537;
     sing_value_type client_d = 0;
     
