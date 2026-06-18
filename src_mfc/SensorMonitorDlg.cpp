@@ -508,14 +508,13 @@ public:
         auto start = std::chrono::steady_clock::now();
         auto end = start + std::chrono::seconds(1); // Лимит времени — 3 секунды
         attempts = 1;
-        sing_value_type sqrt_n = static_cast<sing_value_type>(isqrt(n)) + 1;
 
         log << L"Запуск атаки на RSA ключ (n=" << string_to_wstring(to_string(n)) << L", e=" << string_to_wstring(to_string(e)) << L")\n";
         log << L"Ограничение по времени: 1 секунды\n";
         sing_value_type mina(min_prime);
         while (std::chrono::steady_clock::now() < end) {
             // Генерируем p в диапазоне [2, sqrt(n)]
-            sing_value_type p_candidate = gen_prime_trial(mina, sqrt_n);
+            sing_value_type p_candidate = gen_prime_trial(mina, max_prime);
 
             _p = p_candidate;
             // Проверяем, делится ли n на p_candidate
@@ -770,7 +769,6 @@ void CSensorMonitorDlg::ReadSerialData()
         client_q = gen_prime_vuln(min_prime, max_prime);
         m_start_point = new Vector3(value);
         m_lock = true;
-        max_prime = max_prime_end;
     }
 
     m_dataBuffer.push_back({ now, value });
