@@ -6,6 +6,7 @@
 #include "SensorMonitorDlg.h" 
 #include <thread>
 
+#include <sstream>
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -18,31 +19,9 @@ const sing_value_type min_prime_start = 2;
 sing_value_type max_prime_end;
 
 sing_value_type min_prime = 2;
-sing_value_type max_prime = std::numeric_limits<unsigned long long>::max();
-
-
-std::string to_string(sing_value_type vt)
-{
-    return vt.str();
-}
-
 
 const sing_value_type zero(0);
-#include <iostream>
-#include <string>
-#include <map>
-#include <cstdlib>
-#include <ctime>
-#include <thread>
-#include <chrono>
-#include <locale>
-#include <codecvt>
-
-std::wstring string_to_wstring(const std::string& str) {
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    return converter.from_bytes(str);
-}
-
+sing_value_type max_prime = std::numeric_limits<unsigned long long>::max();
 sing_value_type isqrt(sing_value_type n) {
     if (n == zero) return 0;
     sing_value_type lo = 1, hi = n;
@@ -64,6 +43,128 @@ sing_value_type isqrt(sing_value_type n) {
     }
     return ans;
 }
+
+class BigRandomSumDecomposer {
+public:
+    // Конструктор с готовым генератором
+    explicit BigRandomSumDecomposer(std::mt19937_64&& gen) : gen_(std::move(gen)) {}
+
+    // Конструктор с seed
+    explicit BigRandomSumDecomposer(unsigned long long seed) : gen_(seed) {}
+
+    /**
+     * Разлагает большое число X на сумму случайных слагаемых.
+     * X может быть больше 64 бит (например, 128-битное).
+     */
+    std::vector<sing_value_type> decompose(const sing_value_type& x) const {
+        if (x <= 0) {
+            return {};
+        }
+
+        std::vector<sing_value_type> parts;
+        sing_value_type rem = x;
+
+        while (rem > 0) {
+            // --- ГЕНЕРАЦИЯ СЛУЧАЙНОГО ЧИСЛА В ДИАПАЗОНЕ [1, rem] ---
+
+            // 1. Узнаем, сколько бит в остатке. Это нужно, чтобы генерировать число похожей длины.
+            size_t bits = rem.bits();
+            size_t bytes = (bits / 8) + 1; // Округляем вверх до байт
+
+            // 2. Генерируем случайные байты. 
+            // Создаем буфер нужного размера.
+            std::vector<uint8_t> rand_bytes(bytes);
+            std::uniform_int_distribution<int> byte_dist(0, 255);
+
+            for (auto& b : rand_bytes) {
+                b = static_cast<uint8_t>(byte_dist(gen_));
+            }
+
+            // 3. Превращаем байты в большое число (Big Endian)
+            sing_value_type r = 0;
+            for (uint8_t b : rand_bytes) {
+                r <<= 8;
+                r |= b;
+            }
+
+            // 4. Ограничиваем диапазон: r = (r % rem) + 1
+            // Это гарантирует: 1 <= r <= rem
+            r %= rem;       // Теперь r в диапазоне [0, rem-1]
+            r += 1;         // Теперь r в диапазоне [1, rem]
+
+            // ---------------------------------------------------------
+
+            parts.push_back(r);
+            rem -= r;
+        }
+
+        return parts;
+    }
+     sing_value_type  rand_int(sing_value_type  high)  {
+        
+        sing_value_type rem = high;
+
+        while (rem > 0) {
+            // --- ГЕНЕРАЦИЯ СЛУЧАЙНОГО ЧИСЛА В ДИАПАЗОНЕ [1, rem] ---
+
+            // 1. Узнаем, сколько бит в остатке. Это нужно, чтобы генерировать число похожей длины.
+            size_t bits = rem.bits();
+            size_t bytes = (bits / 8) + 1; // Округляем вверх до байт
+
+            // 2. Генерируем случайные байты. 
+            // Создаем буфер нужного размера.
+            std::vector<uint8_t> rand_bytes(bytes);
+            std::uniform_int_distribution<int> byte_dist(0, 255);
+
+            for (auto& b : rand_bytes) {
+                b = static_cast<uint8_t>(byte_dist(gen_));
+            }
+
+            // 3. Превращаем байты в большое число (Big Endian)
+            sing_value_type r = 0;
+            for (uint8_t b : rand_bytes) {
+                r <<= 8;
+                r |= b;
+            }
+
+            // 4. Ограничиваем диапазон: r = (r % rem) + 1
+            // Это гарантирует: 1 <= r <= rem
+            r %= rem;       // Теперь r в диапазоне [0, rem-1]
+            r += 1;         // Теперь r в диапазоне [1, rem]
+
+            // ---------------------------------------------------------
+
+            return r;
+        }
+    }
+private:
+    mutable std::mt19937_64 gen_;
+};
+
+BigRandomSumDecomposer attack_2(time(0));
+
+std::string to_string(sing_value_type vt)
+{
+    return vt.str();
+}
+
+
+#include <iostream>
+#include <string>
+#include <map>
+#include <cstdlib>
+#include <ctime>
+#include <thread>
+#include <chrono>
+#include <locale>
+#include <codecvt>
+
+std::wstring string_to_wstring(const std::string& str) {
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    return converter.from_bytes(str);
+}
+
+
 
 
 // Упрощённый «сертификат»: просто набор пар «ключ-значение» + подпись
@@ -178,7 +279,7 @@ const sing_value_type two(2);
 // === УЯЗВИМЫЙ ГПСЧ: слаб в первые 10 секунд ===
 class VulnerableRNG {
     static std::random_device* rd;  // источник энтропии (если доступен)
-    static std::mt19937* gen; // генератор Мерсенна-Твистера
+    static std::mt19937* gen; // генератор Мерсенна-Твистера 
 public:
     static bool is_weak_window; // true в первые 10 сек
     static void seed() {
@@ -193,9 +294,10 @@ public:
         std::uniform_int_distribution<unsigned long long> dist(low, high);
         return sing_value_type(dist(*gen));
     }
+     
 };
 std::random_device* VulnerableRNG::rd;
-std::mt19937* VulnerableRNG::gen;
+std::mt19937* VulnerableRNG::gen; 
 
 bool VulnerableRNG::is_weak_window = true;
 
@@ -470,6 +572,9 @@ SimpleCert sign_csr(const CSR& csr, const SimpleCert& ca_cert,
     return client_cert;
 }
 
+
+
+
 // Проверка сертификата
 bool verify_cert(const SimpleCert& cert, const SimpleCert& ca_cert) {
     // Берём открытый ключ УЦ из его сертификата
@@ -508,23 +613,42 @@ public:
         auto start = std::chrono::steady_clock::now();
         auto end = start + std::chrono::seconds(1); // Лимит времени — 3 секунды
         attempts = 1;
-
         log << L"Запуск атаки на RSA ключ (n=" << string_to_wstring(to_string(n)) << L", e=" << string_to_wstring(to_string(e)) << L")\n";
         log << L"Ограничение по времени: 1 секунды\n";
         sing_value_type mina(min_prime);
         while (std::chrono::steady_clock::now() < end) {
             // Генерируем p в диапазоне [2, sqrt(n)]
-            sing_value_type p_candidate = gen_prime_trial(mina, max_prime);
+            attack_2.decompose(n);
+            sing_value_type p_candidate_2;
+            do {
+                p_candidate_2 = attack_2.rand_int(max_prime); // Используем текущий rand()
+            } while (!is_prime(p_candidate_2));
 
+            sing_value_type p_candidate = gen_prime_trial(mina, max_prime);
             _p = p_candidate;
+
             // Проверяем, делится ли n на p_candidate
-            if (n % p_candidate == zero) {
+            if (n % p_candidate == zero || n% p_candidate_2 == zero) {
                 sing_value_type q_candidate = n / p_candidate;
+                sing_value_type q_candidate_2 = n / p_candidate_2;
                 MessageBeep(MB_ICONASTERISK);
                 MessageBeep(MB_ICONASTERISK);
                 MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);                
+                MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);
+                MessageBeep(MB_ICONASTERISK);
+                log << L"ВЗЛОМ ВОЗМОЖНО УСПЕШЕН! Найдено p=" << string_to_wstring(to_string(p_candidate))
+                    << L", q=" << string_to_wstring(to_string(q_candidate)) << L"\n";
+                log << L"ВЗЛОМ ВОЗМОЖНО УСПЕШЕН! Найдено p2=" << string_to_wstring(to_string(p_candidate_2))
+                    << L", q2=" << string_to_wstring(to_string(q_candidate_2)) << L"\n";
                 // Проверяем, что q тоже простое
-                if (is_prime(q_candidate)) {
+                if (is_prime(q_candidate) || is_prime(q_candidate_2)) {
                     log << L"ВЗЛОМ УСПЕШЕН! Найдено p=" << string_to_wstring(to_string(p_candidate))
                         << L", q=" << string_to_wstring(to_string(q_candidate))  << L"\n";
                     _q = q_candidate;
@@ -550,6 +674,7 @@ public:
                         continue;
                     }
                 }
+                return true;
             }
 
             attempts++;
@@ -1008,7 +1133,6 @@ void CSensorMonitorDlg::UpdateMetrics()
 
 }
 
-#include <sstream>
 
 const sing_value_type one(1);
 
